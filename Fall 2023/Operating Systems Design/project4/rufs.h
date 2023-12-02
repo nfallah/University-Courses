@@ -17,7 +17,6 @@
 #define MAX_INUM 1024
 #define MAX_DNUM 16384
 
-
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
 	uint16_t	max_inum;			/* maximum inode number */
@@ -46,10 +45,10 @@ struct dirent {
 	uint16_t len;					/* length of name */
 };
 
-
 /*
  * bitmap operations
  */
+
 typedef unsigned char* bitmap_t;
 
 void set_bitmap(bitmap_t b, int i) {
