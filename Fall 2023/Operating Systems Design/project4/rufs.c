@@ -104,79 +104,107 @@ int get_avail_blkno() {
  * inode operations
  */
 int readi(uint16_t ino, struct inode *inode) {
-
 	// Step 1: Get the inode's on-disk block number
-
 	// Step 2: Get offset of the inode in the inode on-disk block
-
 	// Step 3: Read the block from disk and then copy into inode structure
-
-	return 0;
+	struct superblock *superblock = get_superblock();
+	if (!superblock) return -1;
+	if (ino >= superblock->max_inum) {
+		free(superblock);
+		return -1;
+	}
+	size_t inodes_byte_size = superblock->max_inum * sizeof(struct inode),
+		inodes_block_size = (inodes_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+	void *base = malloc(inodes_byte_size);
+	if (!base) {
+		free(superblock);
+		return -1;
+	}
+	if (bio_read_multi(superblock->i_start_blk, inodes_block_size, base) != EXIT_SUCCESS) {
+		free(superblock);
+		free(base);
+		return -1;
+	}
+	memcpy((void *)inode, base + ino * sizeof(struct inode), sizeof(struct inode));
+	free(superblock);
+	free(base);
+	return EXIT_SUCCESS;
 }
 
 int writei(uint16_t ino, struct inode *inode) {
-
 	// Step 1: Get the block number where this inode resides on disk
-	
 	// Step 2: Get the offset in the block where this inode resides on disk
-
 	// Step 3: Write inode to disk 
-
-	return 0;
+	struct superblock *superblock = get_superblock();
+	if (!superblock) return -1;
+	if (ino >= superblock->max_inum) {
+		free(superblock);
+		return -1;
+	}
+	size_t inodes_byte_size = superblock->max_inum * sizeof(struct inode),
+		inodes_block_size = (inodes_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+	void *base = malloc(inodes_byte_size);
+	if (!base) {
+		free(superblock);
+		return -1;
+	}
+	if (bio_read_multi(superblock->i_start_blk, inodes_block_size, base) != EXIT_SUCCESS) {
+		free(superblock);
+		free(base);
+		return -1;
+	}
+	memcpy(base + ino * sizeof(struct inode), (void *)inode, sizeof(inode));
+	if (bio_write_multi(superblock->i_start_blk, inodes_block_size, base) != EXIT_SUCCESS) {
+		free(superblock);
+		free(base);
+		return -1;
+	}
+	free(superblock);
+	free(base);
+	return EXIT_SUCCESS;
 }
 
 /* 
  * directory operations
  */
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
+	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
+	// Step 2: Get data block of current directory from inode
+	// Step 3: Read directory's data block and check each directory entry.
+	// If the name matches, then copy directory entry to dirent structure
+	struct inode *inode = malloc(sizeof(struct inode));
+	if (!inode) return -1;
 
-  // Step 1: Call readi() to get the inode using ino (inode number of current directory)
-
-  // Step 2: Get data block of current directory from inode
-
-  // Step 3: Read directory's data block and check each directory entry.
-  //If the name matches, then copy directory entry to dirent structure
-
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
-
 	// Step 1: Read dir_inode's data block and check each directory entry of dir_inode
-	
 	// Step 2: Check if fname (directory name) is already used in other entries
-
 	// Step 3: Add directory entry in dir_inode's data block and write to disk
-
 	// Allocate a new data block for this directory if it does not exist
-
 	// Update directory inode
-
 	// Write directory entry
 
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
-
 	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
-	
 	// Step 2: Check if fname exist
-
 	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
 
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 /* 
  * namei operation
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
-	
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
 
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 /* 
