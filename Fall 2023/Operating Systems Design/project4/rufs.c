@@ -25,20 +25,16 @@
 char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
-bitmap_t inode_bitmap, data_bitmap;
 
 /* 
  * Get available inode number from bitmap
  */
 int get_avail_ino() {
-
 	// Step 1: Read inode bitmap from disk
-	
 	// Step 2: Traverse inode bitmap to find an available slot
-
 	// Step 3: Update inode bitmap and write to disk 
 
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 /* 
@@ -60,11 +56,11 @@ int get_avail_blkno() {
  */
 int readi(uint16_t ino, struct inode *inode) {
 
-  // Step 1: Get the inode's on-disk block number
+	// Step 1: Get the inode's on-disk block number
 
-  // Step 2: Get offset of the inode in the inode on-disk block
+	// Step 2: Get offset of the inode in the inode on-disk block
 
-  // Step 3: Read the block from disk and then copy into inode structure
+	// Step 3: Read the block from disk and then copy into inode structure
 
 	return 0;
 }
