@@ -17,6 +17,10 @@
 #define MAX_INUM 1024
 #define MAX_DNUM 16384
 
+// User-defined; makes inode type differentiation more explicit and convenient
+#define DIRECTORY 0
+#define FILE 1
+
 // User-defined; makes boolean logic more explicit and convenient
 #define FALSE 0
 #define TRUE 1
@@ -154,6 +158,14 @@ void update_data_bitmap(bitmap_t data_bitmap, boolean free_bitmap) {
 	}
 	free(superblock);
 	if (free_bitmap) free(data_bitmap);
+}
+
+int min(int a, int b) {
+	return a < b ? a : b;
+}
+
+int max(int a, int b) {
+	return a > b ? a : b;
 }
 
 #endif

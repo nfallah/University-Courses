@@ -167,6 +167,12 @@ int writei(uint16_t ino, struct inode *inode) {
 /* 
  * directory operations
  */
+
+// TODO:
+// - update link size when adding/removing directories
+// - add root directory (just need an inode for 0)!
+// - add struct dirent for parent ".." and self "." every time you make a dir? (i.e., 2x adddir on mkdir creation)
+// - if implementing rmdir and rmfil, make sure to do recursive traversal before deleting current file. update links!!
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
 	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
 	// Step 2: Get data block of current directory from inode
@@ -174,8 +180,49 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 	// If the name matches, then copy directory entry to dirent structure
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return -1;
-
-	return EXIT_SUCCESS;
+	if (readi(ino, inode) != EXIT_SUCCESS) {
+		free(inode);
+		return -1;
+	}
+	void *base = malloc(BLOCK_SIZE);
+	if (!base) {
+		free(inode);
+		return -1;
+	}
+	size_t inode_block_size = (inode->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+	if (inode_block_size > 16 || inode->type != DIRECTORY || !inode->valid) {
+		free(inode);
+		free(base);
+		return -1;
+	}
+	size_t block_dirent_size = BLOCK_SIZE / sizeof(struct dirent),
+		size = inode->size;
+	for (unsigned int i = 0; i < inode_block_size; i++) {
+		int block_num = inode->direct_ptr[i];
+		if (bio_read_multi(block_num, 1, base) != EXIT_SUCCESS) {
+			free(inode);
+			free(base);
+			return -1;
+		}
+		for (unsigned int j = 0; j < block_dirent_size; j++) {
+			if (size < sizeof(struct dirent)) {
+				free(inode);
+				free(base);
+				return -1;
+			}
+			struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
+			if (current_dirent->valid && strncmp(current_dirent->name, fname, name_len) == 0) {
+				memcpy(dirent, current_dirent, sizeof(struct dirent));
+				free(inode);
+				free(base);
+				return EXIT_SUCCESS;
+			}
+			size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
+		}
+	}
+	free(inode);
+	free(base);
+	return -1;
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
@@ -185,8 +232,60 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	// Allocate a new data block for this directory if it does not exist
 	// Update directory inode
 	// Write directory entry
-
-	return EXIT_SUCCESS;
+	size_t inode_block_size = (dir_inode.size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+	if (inode_block_size > 16 || dir_inode.type != DIRECTORY || !dir_inode.valid) return -1;
+	void *base = malloc(BLOCK_SIZE);
+	if (!base) return -1;
+	size_t block_dirent_size = BLOCK_SIZE / sizeof(struct dirent),
+		size = dir_inode.size;
+	int block_num_target = -1,
+		dirent_index = -1;
+	for (unsigned int i = 0; i < inode_block_size; i++) {
+		int block_num = dir_inode.direct_ptr[i];
+		if (bio_read_multi(block_num, 1, base) != EXIT_SUCCESS) {
+			free(base);
+			return -1;
+		}
+		for (unsigned int j = 0; j < block_dirent_size; j++) {
+			if (size < sizeof(struct dirent)) {
+				goto end;
+			}
+			struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
+			if (current_dirent->valid && strncmp(current_dirent->name, fname, name_len) == 0) {
+				free(base);
+				return -1;
+			}
+			if (!current_dirent->valid && block_num_target == -1) {
+				block_num_target = i;
+				dirent_index = j;
+			}
+			size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
+		}
+	}
+	end:
+		if (block_num_target == -1 || (block_num_target < block_dirent_size && bio_read_multi(block_num_target, 1, base) != EXIT_SUCCESS)) {
+			free(base);
+			return -1;
+		}
+		dir_inode.link++;
+		if (writei(dir_inode.ino, &dir_inode) != EXIT_SUCCESS) {
+        	free(base);
+        	return -1;
+    	}
+		struct dirent *dirent = (struct dirent *)(base + dirent_index * sizeof(struct dirent));
+		dirent->ino = f_ino;
+		dirent->valid = TRUE;
+		memset(dirent->name, 0, 208);
+		memcpy(dirent->name, fname, name_len);
+		dirent->len = name_len;
+		if (bio_write_multi(block_num_target, 1, base) != EXIT_SUCCESS) {
+			dir_inode.link--;
+        	writei(dir_inode.ino, &dir_inode);
+			free(base);
+			return -1;
+		}
+		free(base);
+		return EXIT_SUCCESS;
 }
 
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
