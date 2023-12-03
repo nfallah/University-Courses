@@ -32,23 +32,72 @@ char diskfile_path[PATH_MAX];
 int get_avail_ino() {
 	// Step 1: Read inode bitmap from disk
 	// Step 2: Traverse inode bitmap to find an available slot
-	// Step 3: Update inode bitmap and write to disk 
-
-	return EXIT_SUCCESS;
+	// Step 3: Update inode bitmap and write to disk
+	struct superblock *superblock = get_superblock();
+	if (!superblock) return -1;
+	bitmap_t inode_bitmap = get_inode_bitmap();
+	if (!inode_bitmap) {
+		free(superblock);
+		return -1;
+	}
+	size_t inode_bitmap_byte_size = (superblock->max_inum + 7) / 8,
+		inode_bitmap_block_size = (inode_bitmap_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+	for (unsigned int i = 0; i < inode_bitmap_byte_size; i++) {
+		if (inode_bitmap[i] == 255) continue;
+		for (int j = 0; j < 8; j++) {
+			if (get_bitmap(inode_bitmap, i * 8 + j) == FALSE) {
+				set_bitmap(inode_bitmap, i * 8 + j);
+				if (bio_write_multi(superblock->i_bitmap_blk, inode_bitmap_block_size, inode_bitmap) != EXIT_SUCCESS) {
+					free(superblock);					
+					free(inode_bitmap);
+					return -1;
+				}
+				free(superblock);
+				free(inode_bitmap);
+				return i * 8 + j;
+			}
+		}
+	}
+	free(superblock);
+	free(inode_bitmap);
+	return -1;
 }
 
 /* 
  * Get available data block number from bitmap
  */
 int get_avail_blkno() {
-
 	// Step 1: Read data block bitmap from disk
-	
 	// Step 2: Traverse data block bitmap to find an available slot
-
 	// Step 3: Update data block bitmap and write to disk 
-
-	return 0;
+    struct superblock *superblock = get_superblock();
+    if (!superblock) return -1;
+    bitmap_t data_bitmap = get_data_bitmap();
+    if (!data_bitmap) {
+        free(superblock);
+        return -1;
+    }
+    size_t data_bitmap_byte_size = (superblock->max_dnum + 7) / 8,
+        data_bitmap_block_size = (data_bitmap_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    for (unsigned int i = 0; i < data_bitmap_byte_size; i++) {
+		if (data_bitmap[i] == 255) continue;
+		for (int j = 0; j < 8; j++) {
+			if (get_bitmap(data_bitmap, i * 8 + j) == FALSE) {
+				set_bitmap(data_bitmap, i * 8 + j);
+				if (bio_write_multi(superblock->d_bitmap_blk, data_bitmap_block_size, data_bitmap) != EXIT_SUCCESS) {
+					free(superblock);
+					free(data_bitmap);
+					return -1;
+				}
+				free(superblock);
+				free(data_bitmap);
+				return i * 8 + j;
+			}
+		}
+    }
+    free(superblock);
+    free(data_bitmap);
+    return -1;
 }
 
 /* 
