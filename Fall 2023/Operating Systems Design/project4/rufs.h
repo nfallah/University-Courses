@@ -88,76 +88,66 @@ struct superblock *get_superblock() {
 	return superblock;
 }
 
-bitmap_t get_inode_bitmap() {
-	struct superblock *superblock = get_superblock();
+bitmap_t get_inode_bitmap(struct superblock *superblock) {
 	if (!superblock) return NULL;
 	size_t inode_bitmap_byte_size = (superblock->max_inum + 7) / 8,
 		inode_bitmap_block_size = (inode_bitmap_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	bitmap_t inode_bitmap = malloc(inode_bitmap_byte_size);
 	if (!inode_bitmap) {
-		free(superblock);
 		return NULL;
 	}
 	if (bio_read_multi(superblock->i_bitmap_blk, inode_bitmap_block_size, inode_bitmap) != EXIT_SUCCESS) {
-		free(superblock);
 		free(inode_bitmap);
 		return NULL;
 	}
-	free(superblock);
 	return inode_bitmap;
 }
 
-void update_inode_bitmap(bitmap_t inode_bitmap, boolean free_bitmap) {
-	struct superblock *superblock = get_superblock();
+// Currently unused
+int update_inode_bitmap(bitmap_t inode_bitmap, boolean free_bitmap, struct superblock *superblock) {
 	if (!superblock) {
 		perror("update_inode_bitmap failed");
-		return;
+		return -1;
 	}
 	size_t inode_bitmap_byte_size = (superblock->max_inum + 7) / 8,
 		inode_bitmap_block_size = (inode_bitmap_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	if (bio_write_multi(superblock->i_bitmap_blk, inode_bitmap_block_size, inode_bitmap) != EXIT_SUCCESS) {
 		perror("update_inode_bitmap failed");
-		free(superblock);
-		return;
+		return -1;
 	}
-	free(superblock);
 	if (free_bitmap) free(inode_bitmap);
+	return EXIT_SUCCESS;
 }
 
-bitmap_t get_data_bitmap() {
-	struct superblock *superblock = get_superblock();
+bitmap_t get_data_bitmap(struct superblock *superblock) {
 	if (!superblock) return NULL;
 	size_t data_bitmap_byte_size = (superblock->max_dnum + 7) / 8,
 		data_bitmap_block_size = (data_bitmap_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	bitmap_t data_bitmap = malloc(data_bitmap_byte_size);
 	if (!data_bitmap) {
-		free(superblock);
 		return NULL;
 	}
 	if (bio_read_multi(superblock->d_bitmap_blk, data_bitmap_block_size, data_bitmap) != EXIT_SUCCESS) {
-		free(superblock);
 		free(data_bitmap);
 		return NULL;
 	}
-	free(superblock);
 	return data_bitmap;
 }
 
-void update_data_bitmap(bitmap_t data_bitmap, boolean free_bitmap) {
-	struct superblock *superblock = get_superblock();
+// Currently unused
+int update_data_bitmap(bitmap_t data_bitmap, boolean free_bitmap, struct superblock *superblock) {
 	if (!superblock) {
 		perror("update_data_bitmap failed");
-		return;
+		return -1;
 	}
 	size_t data_bitmap_byte_size = (superblock->max_dnum + 7) / 8,
 		data_bitmap_block_size = (data_bitmap_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	if (bio_write_multi(superblock->d_bitmap_blk, data_bitmap_block_size, data_bitmap) != EXIT_SUCCESS) {
 		perror("update_data_bitmap failed");
-		free(superblock);
-		return;
+		return -1;
 	}
-	free(superblock);
 	if (free_bitmap) free(data_bitmap);
+	return EXIT_SUCCESS;
 }
 
 int min(int a, int b) {
