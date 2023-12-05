@@ -103,7 +103,6 @@ bitmap_t get_inode_bitmap(struct superblock *superblock) {
 	return inode_bitmap;
 }
 
-// Currently unused
 int update_inode_bitmap(bitmap_t inode_bitmap, boolean free_bitmap, struct superblock *superblock) {
 	if (!superblock) {
 		perror("update_inode_bitmap failed");
@@ -134,7 +133,6 @@ bitmap_t get_data_bitmap(struct superblock *superblock) {
 	return data_bitmap;
 }
 
-// Currently unused
 int update_data_bitmap(bitmap_t data_bitmap, boolean free_bitmap, struct superblock *superblock) {
 	if (!superblock) {
 		perror("update_data_bitmap failed");
