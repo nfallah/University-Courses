@@ -80,29 +80,27 @@ int bio_write(const int block_num, const void *buf) {
  * helper functions
  */
 
-// Read multiple blocks from the disk
+// Wrapper function for bio_read().
+// Can read any number of consecutive blocks.
 int bio_read_multi(unsigned int block_num, unsigned int block_count, void *buf) {
   char *buf_ptr = (char *)buf;
   int retstat = 0;
   for (unsigned int current_block_num = block_num; current_block_num < block_num + block_count; current_block_num++) {
     retstat = bio_read(current_block_num, (void *)buf_ptr);
-    if (retstat < 0) {
-      return retstat;
-    }
+    if (retstat < 0) return retstat;
     buf_ptr += BLOCK_SIZE;
   }
   return EXIT_SUCCESS;
 }
 
-// Write multiple blocks to the disk
+// Wrapper function for bio_write().
+// Can write any number of consecutive blocks.
 int bio_write_multi(unsigned int block_num, unsigned int block_count, void *buf) {
   char *buf_ptr = (char *)buf;
   int retstat = 0;
   for (unsigned int current_block_num = block_num; current_block_num < block_num + block_count; current_block_num++) {
     retstat = bio_write(current_block_num, (void *)buf_ptr);
-    if (retstat < 0) {
-      return retstat;
-    } 
+    if (retstat < 0) return retstat;
     buf_ptr += BLOCK_SIZE;
   }
   return EXIT_SUCCESS;
