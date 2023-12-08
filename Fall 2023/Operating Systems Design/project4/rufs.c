@@ -814,7 +814,7 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 // Status: COMPLETE
 static int rufs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
     debug("rufs_write(): ENTER\n");
-	printf("You want to write %d bytes with an offset of %d.\n", size, offset);
+	debug("rufs_write(): WRITING \"%lu\" BYTES WITH AN OFFSET OF \"%ld\"\n", size, offset);
     if (size == 0) return 0;
     struct inode *inode = malloc(sizeof(struct inode));
     if (!inode) return 0;
