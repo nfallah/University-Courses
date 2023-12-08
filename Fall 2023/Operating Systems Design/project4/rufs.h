@@ -31,7 +31,7 @@
 #define FALSE 0
 #define TRUE 1
 
-#define DEBUG TRUE
+#define DEBUG FALSE
 
 #define ROOT_INO 0
 
@@ -127,6 +127,7 @@ bitmap_t get_inode_bitmap(struct superblock *superblock) {
 		return NULL;
 	}
 	memcpy(inode_bitmap_real, inode_bitmap, inode_bitmap_byte_size);
+	free(inode_bitmap);
 	return inode_bitmap_real;
 }
 
@@ -145,7 +146,7 @@ int update_inode_bitmap(bitmap_t inode_bitmap, boolean free_bitmap, struct super
 		free(inode_bitmap_real);
 		return -1;
 	}
-	if (free_bitmap) free(inode_bitmap);
+	if (free_bitmap == TRUE) free(inode_bitmap);
 	free(inode_bitmap_real);
 	return EXIT_SUCCESS;
 }
@@ -187,6 +188,7 @@ bitmap_t get_data_bitmap(struct superblock *superblock) {
 		return NULL;
 	}
 	memcpy(data_bitmap_real, data_bitmap, data_bitmap_byte_size);
+	free(data_bitmap);
 	return data_bitmap_real;
 }
 
@@ -201,11 +203,11 @@ int update_data_bitmap(bitmap_t data_bitmap, boolean free_bitmap, struct superbl
 	if (!data_bitmap_real) return -1;
 	memset(data_bitmap_real, 0, data_bitmap_block_size * BLOCK_SIZE);
 	memcpy(data_bitmap_real, data_bitmap, data_bitmap_byte_size);
-	if (bio_write_multi(superblock->d_bitmap_blk, data_bitmap_block_size, data_bitmap) != EXIT_SUCCESS) {
+	if (bio_write_multi(superblock->d_bitmap_blk, data_bitmap_block_size, data_bitmap_real) != EXIT_SUCCESS) {
 		free(data_bitmap_real);
 		return -1;
 	}
-	if (free_bitmap) free(data_bitmap);
+	if (free_bitmap == TRUE) free(data_bitmap);
 	free(data_bitmap_real);
 	return EXIT_SUCCESS;
 }
