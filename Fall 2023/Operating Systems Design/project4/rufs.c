@@ -400,6 +400,7 @@ int rufs_mkfs() {
 	struct inode *rootdir_inode = (struct inode *)inodes;
 	set_bitmap(inode_bitmap, 0);
 	rootdir_inode->ino = 0;
+	rootdir_inode->link = 2;
 	rootdir_inode->size = BLOCK_SIZE;
 	rootdir_inode->type = DIRECTORY;
 	rootdir_inode->valid = TRUE;
@@ -641,9 +642,9 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	memset(base_inode, 0, sizeof(struct inode));
 	memset(block_ptr, 0, BLOCK_SIZE);
 	bio_write(base_block, block_ptr);
-	base_inode->link = 0;
 	base_inode->direct_ptr[0] = base_block;
 	base_inode->ino = base_ino;
+	base_inode->link = 2;
 	base_inode->size = BLOCK_SIZE;
 	base_inode->type = DIRECTORY;
 	base_inode->valid = TRUE;
