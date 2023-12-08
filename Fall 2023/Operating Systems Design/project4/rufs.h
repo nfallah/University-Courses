@@ -9,6 +9,7 @@
 #include <linux/limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdarg.h> // User defined import
 
 #ifndef _TFS_H
 #define _TFS_H
@@ -24,10 +25,15 @@
 #define DIRECTORY 0
 #define FILE 1
 
+#define DIRECTORY_MODE S_IFDIR | 0755
+#define FILE_MODE S_IFREG | 0755
+
 #define FALSE 0
 #define TRUE 1
 
-#define ROOTDIR 0
+#define DEBUG TRUE
+
+#define ROOT_INO 0
 
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
@@ -82,6 +88,7 @@ uint8_t get_bitmap(bitmap_t b, int i) {
 typedef unsigned char boolean;
 
 // Returns an instantiation of the superblock written from the disk.
+// Status: COMPLETE
 struct superblock *get_superblock() {
 	size_t superblock_block_size = (sizeof(struct superblock) + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	struct superblock *superblock = malloc(superblock_block_size * BLOCK_SIZE);
@@ -102,6 +109,7 @@ struct superblock *get_superblock() {
 }
 
 // Returns an instantiation of the inode bitmap written from the disk.
+// Status: COMPLETE
 bitmap_t get_inode_bitmap(struct superblock *superblock) {
 	if (!superblock) return NULL;
 	size_t inode_bitmap_byte_size = (superblock->max_inum + 7) / 8,
@@ -123,6 +131,7 @@ bitmap_t get_inode_bitmap(struct superblock *superblock) {
 }
 
 // Writes the parametrized inode bitmap to the disk, which can also be optionally freed.
+// Status: COMPLETE
 int update_inode_bitmap(bitmap_t inode_bitmap, boolean free_bitmap, struct superblock *superblock) {
 	// Note that inode_bitmap has a precise size (i.e., not rounded up to the nearest block).
 	if (!superblock) return -1;
@@ -141,7 +150,26 @@ int update_inode_bitmap(bitmap_t inode_bitmap, boolean free_bitmap, struct super
 	return EXIT_SUCCESS;
 }
 
+// Additional implementation of get_avail_blkno() that does not write to the disk.
+// Status: COMPLETE
+int get_avail_ino_no_wr(bitmap_t inode_bitmap, struct superblock *superblock) {
+	// Note that inode_bitmap must be externally freed.
+    if (!inode_bitmap) return -1;
+    size_t inode_bitmap_byte_size = (superblock->max_inum + 7) / 8;
+    for (unsigned int i = 0; i < inode_bitmap_byte_size; i++) {
+		if (inode_bitmap[i] == 255) continue;
+		for (int j = 0; j < 8; j++) {
+			if (get_bitmap(inode_bitmap, i * 8 + j) == FALSE) {
+				set_bitmap(inode_bitmap, i * 8 + j);
+				return i * 8 + j;
+			}
+		}
+    }
+    return -1;
+}
+
 // Returns an instantiation of the data bitmap written from the disk.
+// Status: COMPLETE
 bitmap_t get_data_bitmap(struct superblock *superblock) {
 	if (!superblock) return NULL;
 	size_t data_bitmap_byte_size = (superblock->max_dnum + 7) / 8,
@@ -163,6 +191,7 @@ bitmap_t get_data_bitmap(struct superblock *superblock) {
 }
 
 // Writes the parametrized data bitmap to the disk, which can also be optionally freed.
+// Status: COMPLETE
 int update_data_bitmap(bitmap_t data_bitmap, boolean free_bitmap, struct superblock *superblock) {
 	// Note that data_bitmap has a precise size (i.e., not rounded up to the nearest block).
 	if (!superblock) return -1;
@@ -181,24 +210,8 @@ int update_data_bitmap(bitmap_t data_bitmap, boolean free_bitmap, struct superbl
 	return EXIT_SUCCESS;
 }
 
-// Additional implementation of get_avail_blkno() that does not write to the disk
-int get_avail_ino_no_wr(bitmap_t inode_bitmap, struct superblock *superblock) {
-	// Note that inode_bitmap must be externally freed.
-    if (!inode_bitmap) return -1;
-    size_t inode_bitmap_byte_size = (superblock->max_inum + 7) / 8;
-    for (unsigned int i = 0; i < inode_bitmap_byte_size; i++) {
-		if (inode_bitmap[i] == 255) continue;
-		for (int j = 0; j < 8; j++) {
-			if (get_bitmap(inode_bitmap, i * 8 + j) == FALSE) {
-				set_bitmap(inode_bitmap, i * 8 + j);
-				return i * 8 + j;
-			}
-		}
-    }
-    return -1;
-}
-
-// Additional implementation of get_avail_blkno() that does not write to the disk
+// Additional implementation of get_avail_blkno() that does not write to the disk.
+// Status: COMPLETE
 int get_avail_blkno_no_wr(bitmap_t data_bitmap, struct superblock *superblock) {
 	// Note that data_bitmap must be externally freed.
     if (!data_bitmap) return -1;
@@ -215,8 +228,31 @@ int get_avail_blkno_no_wr(bitmap_t data_bitmap, struct superblock *superblock) {
     return -1;
 }
 
+// Returns the next entry from the path
+// Status: COMPLETE
+int split_string(int start_ind, const char *path) {
+	if (!path || start_ind > strlen(path) + 1 || path[start_ind] == '\0') return -1;
+	int curr_ind = start_ind;
+	while (path[curr_ind] != '/' && path[curr_ind] != '\0') curr_ind++;
+	return curr_ind;
+}
+
+// Basic min implementation.
+// Status: COMPLETE
 int min(int a, int b) { return a < b ? a : b; }
 
+// Basic max implementation.
+// Status: COMPLETE
 int max(int a, int b) { return a > b ? a : b; }
+
+// Simple print wrapper that only executes if the debug flag is set.
+// Status: COMPLETE
+void debug(const char *format, ...) {
+	if (DEBUG == FALSE) return;
+	va_list args;
+	va_start(args, format);
+	vprintf(format, args);
+	va_end(args);
+}
 
 #endif

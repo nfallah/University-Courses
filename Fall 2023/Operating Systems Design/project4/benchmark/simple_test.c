@@ -9,7 +9,7 @@
 #include <dirent.h>
 
 /* You need to change this macro to your TFS mount point*/
-#define TESTDIR "/tmp/mountdir"
+#define TESTDIR "/tmp/nf340/mountdir"
 
 #define N_FILES 100
 #define BLOCKSIZE 4096
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
 	printf("TEST 2: File write Success \n");
 
 
-	/*Close operation*/	
+	/* Close operation */	
 	if (close(fd) < 0) {
 		printf("TEST 3: File close failure \n");
 	}
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
 	}
 
 
-	/* Perform sequential reading */
+	/* Perform sequential reading */ 
 	for (i = 0; i < ITERS; i++) {
 		//clear buffer
 		memset(buf, 0, BLOCKSIZE);

@@ -15,7 +15,7 @@ int dev_open(const char* diskfile_path);
 void dev_close();
 int bio_read(const int block_num, void *buf);
 int bio_write(const int block_num, const void *buf);
-int bio_read_multi(unsigned int block_num, unsigned int block_count, void *buf);
-int bio_write_multi(unsigned int block_num, unsigned int block_count, void *buf);
+int bio_read_multi(unsigned int block_num, unsigned int block_count, void *buf); // User-defined
+int bio_write_multi(unsigned int block_num, unsigned int block_count, void *buf); // User-defined
 
 #endif
