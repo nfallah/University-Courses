@@ -445,8 +445,8 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 		memset(rootdir_inode, 0, sizeof(struct inode));
 		readi(ROOT_INO, rootdir_inode);
 		rootdir_inode->direct_ptr[0] = get_avail_blkno();
-		dir_add(*rootdir_inode, 0, ".", 1);
-		dir_add(*rootdir_inode, 0, "..", 2);
+		//dir_add(*rootdir_inode, 0, ".", 1);
+		//dir_add(*rootdir_inode, 0, "..", 2);
 		writei(ROOT_INO, rootdir_inode);
 		free(rootdir_inode);
 	}
@@ -542,7 +542,10 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 		for (unsigned int j = 0; j < block_dirent_size; j++) {
 			if (size < sizeof(struct dirent)) goto end;
 			struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
-			filler(buffer, current_dirent->name, NULL, 0);
+			if (current_dirent->valid == TRUE) {
+				filler(buffer, current_dirent->name, NULL, 0);
+				debug("rufs_readdir(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
+			}
 			size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
 		}
 	}
@@ -647,8 +650,8 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	base_inode->vstat.st_mode = S_IFDIR | mode;
 	base_inode->vstat.st_atime = base_inode->vstat.st_mtime = time(NULL);
 	writei(base_ino, base_inode);
-	dir_add(*base_inode, base_ino, ".", 1);
-	dir_add(*base_inode, dir_inode->ino, "..", 2);
+	//dir_add(*base_inode, base_ino, ".", 1);
+	//dir_add(*base_inode, dir_inode->ino, "..", 2);
 	free(path_dir);
 	free(path_base);
 	free(dir_inode);
