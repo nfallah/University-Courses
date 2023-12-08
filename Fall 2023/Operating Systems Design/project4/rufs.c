@@ -786,7 +786,7 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 	}
 	memset(block_buffer, 0, BLOCK_SIZE);
 	int starting_block_index = offset / BLOCK_SIZE;
-	int ending_block_index = min(15, (offset + size) / BLOCK_SIZE);
+	int ending_block_index = min(15, (offset + size - 1) / BLOCK_SIZE);
 	if (ending_block_index - starting_block_index < 0) {
 		free(inode);
 		free(block_buffer);
@@ -814,6 +814,7 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 // Status: COMPLETE
 static int rufs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
     debug("rufs_write(): ENTER\n");
+	printf("You want to write %d bytes with an offset of %d.\n", size, offset);
     if (size == 0) return 0;
     struct inode *inode = malloc(sizeof(struct inode));
     if (!inode) return 0;
@@ -836,7 +837,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
     }
     memset(block_buffer, 0, BLOCK_SIZE);
     int starting_block_index = offset / BLOCK_SIZE;
-    int ending_block_index = min(15, (offset + size) / BLOCK_SIZE);
+    int ending_block_index = min(15, (offset + size - 1) / BLOCK_SIZE);
     if (ending_block_index - starting_block_index < 0) {
         free(inode);
         free(block_buffer);
@@ -869,10 +870,10 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
     for (int i = starting_block_index; i <= ending_block_index; i++) {
         int bytes_to_read = min(bytes_left, BLOCK_SIZE - block_offset);
         bytes_left = max(0, bytes_left - bytes_to_read);
-        bytes_read += bytes_to_read;
         bio_read_multi(inode->direct_ptr[i], 1, block_buffer);
         memcpy(block_buffer + block_offset, buffer + bytes_read, bytes_to_read);
         bio_write_multi(inode->direct_ptr[i], 1, block_buffer);
+		bytes_read += bytes_to_read;
         block_offset = 0;
     }
     free(inode);
