@@ -781,7 +781,7 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 }
 
 //splits a path into the base path and the final destination ex: /bar/foo/baz -> base: /bar/foo, name -> baz
-void split_dir_path_into_base_path_and_name(const char *path, char **base_path_out, char **name_out){
+void split_path_into_base_path_and_name(const char *path, char **base_path_out, char **name_out){
 	int ind_of_last_slash;
 	for(int curr_slash_ind = 0; curr_slash_ind != -1; curr_slash_ind = split_string(ind_of_last_slash, path)){
 		ind_of_last_slash = curr_slash_ind;
@@ -802,6 +802,23 @@ void split_dir_path_into_base_path_and_name(const char *path, char **base_path_o
 
 }
 
+//removes file or directory
+static int rufs_remove_helper(const char *path){
+	char *base_path;
+	char *remove_target_name;
+	split_path_into_base_path_and_name(path, &base_path, &remove_target_name);
+
+	struct inode base_dir_inode;
+	get_node_by_path(base_path, ROOT_INO, &base_dir_inode);
+
+	int ret_value = dir_remove(base_dir_inode, remove_target_name, strlen(remove_target_name));
+
+	free(base_path);
+	free(remove_target_name);
+
+	return ret_value;
+}
+
 static int rufs_rmdir(const char *path) {
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 	// Step 2: Call get_node_by_path() to get inode of target directory
@@ -810,19 +827,7 @@ static int rufs_rmdir(const char *path) {
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 	// Step 6: Call dir_remove() to remove directory entry of target directory in its parent directory
 
-	char *base_path;
-	char *dir_name;
-	split_dir_path_into_base_path_and_dirname(path, &base_path, &dir_name);
-
-	struct inode base_dir_inode;
-	get_node_by_path(base_path, ROOT_INO, &base_dir_inode);
-
-	int ret_value = dir_remove(base_dir_inode, dir_name, strlen(dir_name));
-
-	free(base_path);
-	free(dir_name);
-
-	return 0;
+	return rufs_remove_helper(path);
 }
 
 static int rufs_releasedir(const char *path, struct fuse_file_info *fi) {
@@ -1046,7 +1051,8 @@ static int rufs_unlink(const char *path) {
 	// Step 4: Clear inode bitmap and its data block
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 	// Step 6: Call dir_remove() to remove directory entry of target file in its parent directory
-	return 0;
+
+	return rufs_remove_helper(path);
 }
 
 static int rufs_truncate(const char *path, off_t size) {
