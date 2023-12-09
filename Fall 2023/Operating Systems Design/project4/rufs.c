@@ -126,7 +126,7 @@ int writei(uint16_t ino, struct inode *inode) {
 	return EXIT_SUCCESS;
 }
 
-int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, int *out_direct_pointer_index, int *out_block_dirent_index, struct dirent *out_dirent){
+int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, size_t name_len, int *out_direct_pointer_index, int *out_block_dirent_index, struct dirent *out_dirent){
 	debug("dir_find(): ENTER\n");
     debug("dir_find(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
     
@@ -185,7 +185,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
         return -1;
     }
 
-    return dir_find_entry_and_location(inode_of_dir, fname, &direct_pointer_index, &block_dirent_index, dirent);
+    return dir_find_entry_and_location(inode_of_dir, fname, name_len, &direct_pointer_index, &block_dirent_index, dirent);
 
 }
 
@@ -367,6 +367,22 @@ void remove_this_file(struct inode inode_of_file_to_remove){
 	remove_inode(inode_of_file_to_remove.ino);
 }
 
+//clears an entry that was occupied in a directory by a now removed file
+int remove_entry_from_directory(struct inode dir_inode, int direct_pointer_index, int block_dirent_index){
+	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
+	int err_code = bio_read(dir_inode.direct_ptr[direct_pointer_index], block_of_mem);
+
+	if(err_code == EXIT_SUCCESS){
+		memset(block_of_mem + block_dirent_index, 0, sizeof(struct dirent));
+		err_code = bio_write(dir_inode.direct_ptr[direct_pointer_index], block_of_mem);
+
+	}
+
+	free(block_of_mem);
+
+	return err_code;
+}
+
 void remove_this_dir(struct inode inode_of_dir_to_remove){
 	if(inode_of_dir_to_remove.type != DIRECTORY){
 		return -ENOTDIR;
@@ -401,7 +417,7 @@ void remove_this_dir(struct inode inode_of_dir_to_remove){
 			else{
 				remove_this_file(inode_of_file_to_remove);
 			}
-			remove_entry_from_directory();
+			remove_entry_from_directory(inode_of_dir_to_remove, direct_pointer_index, directory_entry_index);
 		}
 	}
 
@@ -410,17 +426,14 @@ void remove_this_dir(struct inode inode_of_dir_to_remove){
 	remove_this_file(inode_of_dir_to_remove);
 }
 
-int remove_entry_from_directory(){
-	//this function is a placeholder to remind us that after something within a directory is removed, we must remove the reference to 
-	// that item from the directory
-}
-
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
 	// Step 2: Check if fname exist
 	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
+	int direct_pointer_index;
+	int block_durent_index;
 	struct dirent found_dir_entry;
-	if(dir_find(dir_inode.ino, fname, name_len, &found_dir_entry) == EXIT_FAILURE){
+	if(dir_find_entry_and_location(dir_inode, fname, name_len, &direct_pointer_index, &block_durent_index, &found_dir_entry) == EXIT_FAILURE){
 		return EXIT_FAILURE;
 	}
 
@@ -428,7 +441,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 	readi(found_dir_entry.ino, &inode_of_file_to_remove);
 		
 	remove_this_dir(inode_of_file_to_remove);
-	remove_entry_from_directory();
+	remove_entry_from_directory(dir_inode, direct_pointer_index, block_durent_index);
 	
 	return EXIT_SUCCESS;
 }
