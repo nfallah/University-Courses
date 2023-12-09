@@ -288,10 +288,128 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	return EXIT_SUCCESS;
 }
 
+//clears data block and marks it available in data block bitmap
+void remove_data_block(int data_block_number){
+
+	//clear data block
+	struct dirent *block_of_zeroes = malloc(BLOCK_SIZE);
+	biowrite(data_block_number, block_of_zeroes);
+	free(block_of_zeroes);
+
+	//make data block available in data bitmap
+	bitmap_t data_bitmap = get_data_bitmap(superblock);
+	unset_bitmap(data_bitmap, data_block_number);
+	update_data_bitmap(data_bitmap, TRUE, superblock);
+
+}
+
+//clears an inode (setting mem to all 0 will make it invalid) and removes it from inode bitmap
+void remove_inode(int inode_number){
+
+	//clear data in inode
+	struct inode zero;
+	memset(&zero, 0, sizeof(struct inode));
+	writei(inode_number, &zero);
+
+	//mark cleared inode as available in inode bitmap
+	bitmap_t inode_bitmap = get_inode_bitmap(superblock);
+	unset_bitmap(inode_bitmap, inode_bitmap);
+	update_inode_bitmap(inode_bitmap, TRUE, superblock);
+}
+
+void remove_this_file(struct inode inode_of_file_to_remove){
+	if(inode_of_file_to_remove.link > 1){
+		inode_of_file_to_remove.link --;
+		writei(inode_of_file_to_remove.ino, &inode_of_file_to_remove);
+		return;
+	}
+
+	//clear any allocated blocks pointed to directly
+	for(int direct_pointer_index = 0; direct_pointer_index < 16; direct_pointer_index ++){
+		if(inode_of_file_to_remove.direct_ptr[direct_pointer_index] != 0){
+			remove_data_block(inode_of_file_to_remove.direct_ptr[direct_pointer_index]);
+		}
+	}
+
+	int *data_block_number_array = malloc(BLOCK_SIZE);
+
+	//clear any blocks used by indirect pointers
+	for(int indirect_pointer_index = 0; indirect_pointer_index < 8; indirect_pointer_index ++){
+		
+		//0 means it doesn't point to a block
+		if(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index] == 0){
+			continue;
+		}
+
+		bio_read(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index], data_block_number_array);
+		
+		//free the blocks pointed to by dirents in indirect block
+		for(int indirect_block_index = 0; indirect_block_index < BLOCK_SIZE / sizeof(int); indirect_block_index ++){
+			if(data_block_number_array[indirect_block_index] != 0){
+				remove_data_block(data_block_number_array[indirect_block_index]);
+			}
+		}
+
+		//remove the indirect blocks themselves
+		remove_data_block(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index]);
+	}
+
+	free(data_block_number_array);
+	remove_inode(inode_of_file_to_remove.ino);
+}
+
+void remove_this_dir(struct inode inode_of_dir_to_remove){
+
+	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
+
+	//this loop deletes files and directories inside of this directory
+	for(int direct_pointer_index = 0; direct_pointer_index < 16; direct_pointer_index ++){
+		
+		//points to 0th block means it is not a used pointer
+		if(inode_of_dir_to_remove.direct_ptr[direct_pointer_index] == 0){
+			continue;
+		}
+
+		bio_read(inode_of_dir_to_remove.direct_ptr[direct_pointer_index], block_of_mem);
+
+		for(int directory_entry_index = 0; directory_entry_index < BLOCK_SIZE / sizeof(struct dirent); directory_entry_index ++){
+			struct dirent curr_dir_entry = block_of_mem[directory_entry_index];
+
+			if(curr_dir_entry.valid == FALSE){
+				continue;
+			}
+
+			struct inode inode_of_file_to_remove;
+			readi(curr_dir_entry.ino, &inode_of_file_to_remove);
+
+			//if there is a directory within the directory we want to delete, recurse to delete it first
+			if(inode_of_file_to_remove.type == DIRECTORY){
+				remove_this_dir(inode_of_file_to_remove);
+			}
+			else{
+				remove_this_file(inode_of_file_to_remove);
+			}
+		}
+	}
+
+	free(block_of_mem);
+	//gets called to remove its actual data blocks and inode
+	remove_this_file(inode_of_dir_to_remove);
+}
+
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
 	// Step 2: Check if fname exist
 	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
+	struct dirent found_dir_entry;
+	if(dir_find(dir_inode.ino, fname, name_len, &found_dir_entry) == EXIT_FAILURE){
+		return EXIT_FAILURE;
+	}
+
+	struct inode inode_of_file_to_remove;
+	readi(found_dir_entry.ino, &inode_of_file_to_remove);
+
+	remove_this_dir(inode_of_file_to_remove);
 	return EXIT_SUCCESS;
 }
 
