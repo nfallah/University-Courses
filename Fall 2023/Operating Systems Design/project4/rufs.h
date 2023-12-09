@@ -34,7 +34,12 @@
 
 #define ROOT_INO 0
 
-#define DEBUG FALSE
+#define DEBUG FALSE // Enable for debug statements as the program is running.
+#define BENCHMARK FALSE // Enable for benchmark results when calling rufs_destroy().
+
+// Used for benchmarking
+extern unsigned long long TOTAL_INODE_BLOCKS,
+	TOTAL_DATA_BLOCKS;
 
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
@@ -163,6 +168,7 @@ int get_avail_ino_no_wr(bitmap_t inode_bitmap, struct superblock *superblock) {
 		for (int j = 0; j < 8; j++) {
 			if (get_bitmap(inode_bitmap, i * 8 + j) == FALSE) {
 				set_bitmap(inode_bitmap, i * 8 + j);
+				TOTAL_INODE_BLOCKS++;
 				return i * 8 + j;
 			}
 		}
@@ -224,6 +230,7 @@ int get_avail_blkno_no_wr(bitmap_t data_bitmap, struct superblock *superblock) {
 		for (int j = 0; j < 8; j++) {
 			if (get_bitmap(data_bitmap, i * 8 + j) == FALSE) {
 				set_bitmap(data_bitmap, i * 8 + j);
+				TOTAL_DATA_BLOCKS++;
 				return i * 8 + j;
 			}
 		}

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <time.h>
 
 /* You need to change this macro to your TFS mount point*/
 #define TESTDIR "/tmp/nf340/mountdir"
@@ -22,7 +23,9 @@
 char buf[BLOCKSIZE];
 
 int main(int argc, char **argv) {
-
+	clock_t start, end;
+    double time_spent;
+	start = clock();
 	int i, fd = 0, ret = 0;
 	struct stat st;
 
@@ -111,6 +114,7 @@ int main(int argc, char **argv) {
 			exit(1);
 		}
 	}
+	printf("TEST 6: Sub-directory create success \n");
 	
 	for (i = 0; i < N_FILES; ++i) {
 		DIR *dir;
@@ -134,5 +138,8 @@ int main(int argc, char **argv) {
 	}
 
 	printf("Benchmark completed \n");
+	end = clock();
+	time_spent = ((double)(end - start)) / CLOCKS_PER_SEC;
+	printf("Time spent: %f\n", time_spent);
 	return 0;
 }

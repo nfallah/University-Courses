@@ -24,6 +24,10 @@
 
 char diskfile_path[PATH_MAX];
 
+// Used for benchmarks
+unsigned long long TOTAL_INODE_BLOCKS = 0,
+	TOTAL_DATA_BLOCKS = 0;
+
 // Declare your in-memory data structures here
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct superblock *superblock;
@@ -46,6 +50,7 @@ int get_avail_ino() {
 					free(inode_bitmap);
 					return -1;
 				}
+				TOTAL_INODE_BLOCKS++;
 				return i * 8 + j;
 			}
 		}
@@ -72,6 +77,7 @@ int get_avail_blkno() {
 					free(data_bitmap);
 					return -1;
 				}
+				TOTAL_DATA_BLOCKS++;
 				return i * 8 + j;
 			}
 		}
@@ -578,7 +584,8 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 // Status: COMPLETE
 static void rufs_destroy(void *userdata) {
 	// Step 1: De-allocate in-memory data structures
-	// Step 2: Close diskfile
+	// Step 2: Close diskfile 
+	if (BENCHMARK) printf("TOTAL INODE BLOCKS ALLOCATED: %llu\nTOTAL DATA BLOCKS ALLOCATED: %llu\n", TOTAL_INODE_BLOCKS, TOTAL_DATA_BLOCKS);
 	debug("rufs_destroy(): ENTER\n");
 	pthread_mutex_lock(&mutex);
 	free(superblock);
@@ -606,6 +613,7 @@ static int rufs_getattr(const char *path, struct stat *stbuf) {
 	stbuf->st_uid = getuid();
 	stbuf->st_gid = getgid();
 	stbuf->st_size = inode->size;
+	stbuf->st_blocks = (inode->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	stbuf->st_atime = inode->vstat.st_atime = time(NULL);
 	stbuf->st_mtime = inode->vstat.st_mtime;
 	writei(inode->ino, inode);
