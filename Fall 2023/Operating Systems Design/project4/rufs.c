@@ -401,7 +401,7 @@ int rufs_mkfs() {
 	set_bitmap(inode_bitmap, 0);
 	rootdir_inode->ino = 0;
 	rootdir_inode->link = 2;
-	rootdir_inode->size = BLOCK_SIZE;
+	rootdir_inode->size = 0/*BLOCK_SIZE*/;
 	rootdir_inode->type = DIRECTORY;
 	rootdir_inode->valid = TRUE;
 	rootdir_inode->vstat.st_mode = S_IFDIR | 0755;
@@ -429,28 +429,28 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 	// Step 1b: If disk file is found, just initialize in-memory data structures
 	// and read superblock from disk
 	debug("rufs_init(): ENTER\n");
-	boolean init = FALSE;
-	if (dev_open(diskfile_path) == -1) {
+	//boolean init = FALSE;
+	if (access(diskfile_path, F_OK) != 0) {
 		if (rufs_mkfs() != EXIT_SUCCESS) {
 			dev_close();
 			return NULL;
 		}
-		init = TRUE;
-	}
+		//init = TRUE;
+	} else if (dev_open(diskfile_path) == -1) { return NULL; }
 	if (!(superblock = get_superblock())) {
 		dev_close(diskfile_path);
 		return NULL;
 	}
-	if (init) {
+	/*if (init) {
 		struct inode *rootdir_inode = malloc(sizeof(struct inode));
 		memset(rootdir_inode, 0, sizeof(struct inode));
 		readi(ROOT_INO, rootdir_inode);
 		rootdir_inode->direct_ptr[0] = get_avail_blkno();
-		//dir_add(*rootdir_inode, 0, ".", 1);
-		//dir_add(*rootdir_inode, 0, "..", 2);
+		dir_add(*rootdir_inode, 0, ".", 1);
+		dir_add(*rootdir_inode, 0, "..", 2);
 		writei(ROOT_INO, rootdir_inode);
 		free(rootdir_inode);
-	}
+	}*/
 	debug("rufs_init(): EXIT\n");
 	return NULL;
 }
@@ -587,14 +587,14 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 		free(dir_inode);
 		return -ENOMEM;
 	}
-	void *block_ptr = malloc(BLOCK_SIZE);
+	/*void *block_ptr = malloc(BLOCK_SIZE);
 	if (!block_ptr) {
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
 		free(base_inode);
 		return -ENOMEM;
-	}
+	}*/
 	char *dir_path = dirname(path_dir);
 	char *base = basename(path_base);
 	if (get_node_by_path(dir_path, ROOT_INO, dir_inode) != EXIT_SUCCESS) {
@@ -602,19 +602,19 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 		free(path_base);
 		free(dir_inode);
 		free(base_inode);
-		free(block_ptr);
+		//free(block_ptr);
 		return -ENOENT;
 	}
-	int base_ino, base_block;
+	int base_ino/*, base_block*/;
 	if ((base_ino = get_avail_ino()) == -1) {
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
 		free(base_inode);
-		free(block_ptr);
+		//free(block_ptr);
 		return -ENOSPC;
 	}
-	if ((base_block = get_avail_blkno()) == -1) {
+	/*if ((base_block = get_avail_blkno()) == -1) {
 		bitmap_t inode_bitmap = get_inode_bitmap(superblock);
 		unset_bitmap(inode_bitmap, base_ino);
 		update_inode_bitmap(inode_bitmap, TRUE, superblock);
@@ -624,40 +624,40 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 		free(base_inode);
 		free(block_ptr);
 		return -ENOSPC;
-	}
+	}*/
 	if (dir_add(*dir_inode, base_ino, base, strlen(base)) == -1) {
 		bitmap_t inode_bitmap = get_inode_bitmap(superblock);
 		unset_bitmap(inode_bitmap, base_ino);
 		update_inode_bitmap(inode_bitmap, TRUE, superblock);
-		bitmap_t data_bitmap = get_data_bitmap(superblock);
+		/*bitmap_t data_bitmap = get_data_bitmap(superblock);
 		unset_bitmap(data_bitmap, base_block);
-		update_data_bitmap(data_bitmap, TRUE, superblock);
+		update_data_bitmap(data_bitmap, TRUE, superblock);*/
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
 		free(base_inode);
-		free(block_ptr);
+		//free(block_ptr);
 		return -ENOSPC;
 	}
 	memset(base_inode, 0, sizeof(struct inode));
-	memset(block_ptr, 0, BLOCK_SIZE);
+	/*memset(block_ptr, 0, BLOCK_SIZE);
 	bio_write(base_block, block_ptr);
-	base_inode->direct_ptr[0] = base_block;
+	base_inode->direct_ptr[0] = base_block;*/
 	base_inode->ino = base_ino;
 	base_inode->link = 2;
-	base_inode->size = BLOCK_SIZE;
+	base_inode->size = 0/*BLOCK_SIZE*/;
 	base_inode->type = DIRECTORY;
 	base_inode->valid = TRUE;
 	base_inode->vstat.st_mode = S_IFDIR | mode;
 	base_inode->vstat.st_atime = base_inode->vstat.st_mtime = time(NULL);
 	writei(base_ino, base_inode);
-	//dir_add(*base_inode, base_ino, ".", 1);
-	//dir_add(*base_inode, dir_inode->ino, "..", 2);
+	/*dir_add(*base_inode, base_ino, ".", 1);
+	dir_add(*base_inode, dir_inode->ino, "..", 2);*/
 	free(path_dir);
 	free(path_base);
 	free(dir_inode);
 	free(base_inode);
-	free(block_ptr);
+	//free(block_ptr);
 	debug("rufs_mkdir(): EXIT\n");
 	return 0;
 }
