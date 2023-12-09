@@ -780,6 +780,28 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	return 0;
 }
 
+//splits a path into the base path and the final destination ex: /bar/foo/baz -> base: /bar/foo, name -> baz
+void split_dir_path_into_base_path_and_name(const char *path, char **base_path_out, char **name_out){
+	int ind_of_last_slash;
+	for(int curr_slash_ind = 0; curr_slash_ind != -1; curr_slash_ind = split_string(ind_of_last_slash, path)){
+		ind_of_last_slash = curr_slash_ind;
+	}
+	
+	int base_path_length_without_nullterm = ind_of_last_slash;
+	*base_path_out = malloc(sizeof(char) * (base_path_length_without_nullterm + 1));
+
+	strncpy(*base_path_out, path, base_path_length_without_nullterm);
+	(*base_path_out)[base_path_length_without_nullterm] = '\0';
+
+
+	int dir_name_length_without_nullterm = strlen(path) - ind_of_last_slash;
+	*name_out = malloc(sizeof(char) * (dir_name_length_without_nullterm + 1));
+
+	strncpy(*name_out, path + base_path_length_without_nullterm, dir_name_length_without_nullterm);
+	(*name_out)[dir_name_length_without_nullterm] = '\0';
+
+}
+
 static int rufs_rmdir(const char *path) {
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 	// Step 2: Call get_node_by_path() to get inode of target directory
@@ -788,29 +810,17 @@ static int rufs_rmdir(const char *path) {
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 	// Step 6: Call dir_remove() to remove directory entry of target directory in its parent directory
 
-	int ind_of_last_slash;
-	for(int curr_slash_ind = 0; curr_slash_ind != -1; curr_slash_ind = split_string(ind_of_last_slash, path)){
-		ind_of_last_slash = curr_slash_ind;
-	}
-	
-	int base_path_length_without_nullterm = ind_of_last_slash;
-	char *base_path = malloc(sizeof(char) * (base_path_length_without_nullterm + 1));
-
-	strncpy(base_path, path, base_path_length_without_nullterm);
-	base_path[base_path_length_without_nullterm] = '\0';
-
-
-	int dir_name_length_without_nullterm = strlen(path) - ind_of_last_slash;
-	char *dir_name = malloc(sizeof(char) * (dir_name_length_without_nullterm + 1));
-
-	strncpy(dir_name, path + base_path_length_without_nullterm, dir_name_length_without_nullterm);
-	dir_name[dir_name_length_without_nullterm] = '\0';
-
+	char *base_path;
+	char *dir_name;
+	split_dir_path_into_base_path_and_dirname(path, &base_path, &dir_name);
 
 	struct inode base_dir_inode;
 	get_node_by_path(base_path, ROOT_INO, &base_dir_inode);
 
-	return dir_remove(base_dir_inode, dir_name, strlen(dir_name));
+	int ret_value = dir_remove(base_dir_inode, dir_name, strlen(dir_name));
+
+	free(base_path);
+	free(dir_name);
 
 	return 0;
 }
