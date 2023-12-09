@@ -790,7 +790,7 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 	}
 	memset(block_buffer, 0, BLOCK_SIZE);
 	int starting_block_index = offset / BLOCK_SIZE;
-	int ending_block_index = min(15, (offset + size - 1) / BLOCK_SIZE);
+	int ending_block_index = min(16 + 8 * (BLOCK_SIZE / sizeof(int)), (offset + size - 1) / BLOCK_SIZE);
 	if (ending_block_index - starting_block_index < 0) {
 		free(inode);
 		free(block_buffer);
@@ -802,10 +802,25 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 	for (int i = starting_block_index; i <= ending_block_index; i++) {
 		int bytes_to_read = min(bytes_left, BLOCK_SIZE - block_offset);
 		bytes_left = max(0, bytes_left - bytes_to_read);
-		if (inode->direct_ptr[i] != 0) {
+		if (i < 16) {
+			if (inode->direct_ptr[i] != 0) {
 			bio_read_multi(inode->direct_ptr[i], 1, block_buffer);
 			memcpy(buffer + bytes_read, block_buffer + block_offset, bytes_to_read);
 			bytes_read += bytes_to_read;
+			}
+		} else {
+			int new_i = i - 16;
+			int val_index = new_i % (BLOCK_SIZE / sizeof(int));
+			int ptr_index = new_i / (BLOCK_SIZE / sizeof(int));
+			if (inode->indirect_ptr[ptr_index] != 0) {
+				bio_read_multi(inode->indirect_ptr[ptr_index], 1, block_buffer);
+				int blkno = ((int *)block_buffer)[val_index];
+				if (blkno != 0) {
+					bio_read_multi(blkno, 1, block_buffer);
+					memcpy(buffer + bytes_read, block_buffer + block_offset, bytes_to_read);
+					bytes_read += bytes_to_read;
+				}
+			}
 		}
 		block_offset = 0;
 	}
@@ -827,42 +842,89 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
         free(inode);
         return 0;
     }
+	char *alloc_buffer = malloc(BLOCK_SIZE);
+	if (!alloc_buffer) {
+		free(inode);
+		free(block_buffer);
+		return 0;
+	}
     bitmap_t data_bitmap = get_data_bitmap(superblock);
     if (!data_bitmap) {
         free(inode);
         free(block_buffer);
+		free(alloc_buffer);
         return 0;
     }
     if (get_node_by_path(path, ROOT_INO, inode) != EXIT_SUCCESS || inode->type != FILE) {
         free(inode);
         free(block_buffer);
         free(data_bitmap);
+		free(alloc_buffer);
         return 0;
     }
     memset(block_buffer, 0, BLOCK_SIZE);
     int starting_block_index = offset / BLOCK_SIZE;
-    int ending_block_index = min(15, (offset + size - 1) / BLOCK_SIZE);
+    int ending_block_index = min(15 + 8 * (BLOCK_SIZE / sizeof(int)), (offset + size - 1) / BLOCK_SIZE);
     if (ending_block_index - starting_block_index < 0) {
         free(inode);
         free(block_buffer);
         free(data_bitmap);
+		free(alloc_buffer);
         return 0;
     }
     int size_increase = 0;
     for (int i = starting_block_index; i <= ending_block_index; i++) {
-        if (inode->direct_ptr[i] == 0) {
-            int blkno = get_avail_blkno_no_wr(data_bitmap, superblock);
-            if (blkno == -1) {
-                free(inode);
-                free(block_buffer);
-                free(data_bitmap);
-                return 0;
-            }
-            size_increase += BLOCK_SIZE;
-            inode->direct_ptr[i] = blkno;
-            bio_write_multi(blkno, 1, block_buffer);
-        }
+		int blkno;
+		if (i < 16) {
+			if (inode->direct_ptr[i] == 0) {
+				blkno = get_avail_blkno_no_wr(data_bitmap, superblock);
+				if (blkno == -1) {
+					free(inode);
+					free(block_buffer);
+					free(data_bitmap);
+					free(alloc_buffer);
+					return 0;
+				}
+				size_increase += BLOCK_SIZE;
+				inode->direct_ptr[i] = blkno;
+				bio_write_multi(blkno, 1, block_buffer);
+			}
+		} else {
+			int new_i = i - 16;
+			int val_index = new_i % (BLOCK_SIZE / sizeof(int));
+			int ptr_index = new_i / (BLOCK_SIZE / sizeof(int));
+			if (inode->indirect_ptr[ptr_index] == 0) {
+				blkno = get_avail_blkno_no_wr(data_bitmap, superblock);
+				if (blkno == -1) {
+					free(inode);
+					free(block_buffer);
+					free(data_bitmap);
+					free(alloc_buffer);
+					return 0;
+				}
+				size_increase += BLOCK_SIZE;
+				inode->indirect_ptr[ptr_index] = blkno;
+				bio_write_multi(blkno, 1, block_buffer);
+			}
+			bio_read_multi(inode->indirect_ptr[ptr_index], 1, alloc_buffer);
+			int *list = (int *)alloc_buffer;
+			if (list[val_index] == 0) {
+				blkno = get_avail_blkno_no_wr(data_bitmap, superblock);
+				if (blkno == -1) {
+					free(inode);
+					free(block_buffer);
+					free(data_bitmap);
+					free(alloc_buffer);
+					return 0;
+				}
+				size_increase += BLOCK_SIZE;
+				list[val_index] = blkno;
+				bio_write_multi(blkno, 1, block_buffer);
+				bio_write_multi(inode->indirect_ptr[ptr_index], 1, alloc_buffer);
+			}
+		}
     }
+	free(alloc_buffer);
     if (size_increase > 0) {
         inode->size += size_increase;
         writei(inode->ino, inode);
@@ -874,11 +936,22 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
     for (int i = starting_block_index; i <= ending_block_index; i++) {
         int bytes_to_read = min(bytes_left, BLOCK_SIZE - block_offset);
         bytes_left = max(0, bytes_left - bytes_to_read);
-        bio_read_multi(inode->direct_ptr[i], 1, block_buffer);
-        memcpy(block_buffer + block_offset, buffer + bytes_read, bytes_to_read);
-        bio_write_multi(inode->direct_ptr[i], 1, block_buffer);
+		if (i < 16) {
+			bio_read_multi(inode->direct_ptr[i], 1, block_buffer);
+			memcpy(block_buffer + block_offset, buffer + bytes_read, bytes_to_read);
+			bio_write_multi(inode->direct_ptr[i], 1, block_buffer);
+		} else {
+			int new_i = i - 16;
+			int val_index = new_i % (BLOCK_SIZE / sizeof(int));
+			int ptr_index = new_i / (BLOCK_SIZE / sizeof(int));
+			bio_read_multi(inode->indirect_ptr[ptr_index], 1, block_buffer);
+			int blkno = ((int *)block_buffer)[val_index];
+			bio_read_multi(blkno, 1, block_buffer);
+			memcpy(block_buffer + block_offset, buffer + bytes_read, bytes_to_read);
+			bio_write_multi(blkno, 1, block_buffer);
+		}
 		bytes_read += bytes_to_read;
-        block_offset = 0;
+		block_offset = 0;
     }
     free(inode);
     free(block_buffer);

@@ -25,15 +25,12 @@
 #define DIRECTORY 0
 #define FILE 1
 
-#define DIRECTORY_MODE S_IFDIR | 0755
-#define FILE_MODE S_IFREG | 0755
-
 #define FALSE 0
 #define TRUE 1
 
-#define DEBUG FALSE
-
 #define ROOT_INO 0
+
+#define DEBUG FALSE
 
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
