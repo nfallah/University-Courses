@@ -967,13 +967,13 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
     char *block_buffer = malloc(BLOCK_SIZE);
     if (!block_buffer) {
         free(inode);
-        return 0;
+        return -ENOMEM;
     }
 	char *alloc_buffer = malloc(BLOCK_SIZE);
 	if (!alloc_buffer) {
 		free(inode);
 		free(block_buffer);
-		return 0;
+		return -ENOMEM;
 	}
 	pthread_mutex_lock(&mutex);
     bitmap_t data_bitmap = get_data_bitmap(superblock);
@@ -982,7 +982,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
         free(inode);
         free(block_buffer);
 		free(alloc_buffer);
-        return 0;
+        return -ENOMEM;
     }
     if (get_node_by_path(path, ROOT_INO, inode) != EXIT_SUCCESS || inode->type != FILE) {
 		pthread_mutex_unlock(&mutex);
@@ -990,7 +990,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
         free(block_buffer);
         free(data_bitmap);
 		free(alloc_buffer);
-        return 0;
+        return -ENOENT;
     }
     memset(block_buffer, 0, BLOCK_SIZE);
     int starting_block_index = offset / BLOCK_SIZE;
@@ -1001,7 +1001,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
         free(block_buffer);
         free(data_bitmap);
 		free(alloc_buffer);
-        return 0;
+        return -ENOSPC;
     }
     int size_increase = 0;
     for (int i = starting_block_index; i <= ending_block_index; i++) {
@@ -1015,7 +1015,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 					free(block_buffer);
 					free(data_bitmap);
 					free(alloc_buffer);
-					return 0;
+					return -ENOSPC;
 				}
 				size_increase += BLOCK_SIZE;
 				inode->direct_ptr[i] = blkno;
@@ -1033,7 +1033,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 					free(block_buffer);
 					free(data_bitmap);
 					free(alloc_buffer);
-					return 0;
+					return -ENOSPC;
 				}
 				size_increase += BLOCK_SIZE;
 				inode->indirect_ptr[ptr_index] = blkno;
@@ -1049,7 +1049,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 					free(block_buffer);
 					free(data_bitmap);
 					free(alloc_buffer);
-					return 0;
+					return -ENOSPC;
 				}
 				size_increase += BLOCK_SIZE;
 				list[val_index] = blkno;
