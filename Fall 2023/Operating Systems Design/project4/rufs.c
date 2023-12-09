@@ -787,6 +787,31 @@ static int rufs_rmdir(const char *path) {
 	// Step 4: Clear inode bitmap and its data block
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 	// Step 6: Call dir_remove() to remove directory entry of target directory in its parent directory
+
+	int ind_of_last_slash;
+	for(int curr_slash_ind = 0; curr_slash_ind != -1; curr_slash_ind = split_string(ind_of_last_slash, path)){
+		ind_of_last_slash = curr_slash_ind;
+	}
+	
+	int base_path_length_without_nullterm = ind_of_last_slash;
+	char *base_path = malloc(sizeof(char) * (base_path_length_without_nullterm + 1));
+
+	strncpy(base_path, path, base_path_length_without_nullterm);
+	base_path[base_path_length_without_nullterm] = '\0';
+
+
+	int dir_name_length_without_nullterm = strlen(path) - ind_of_last_slash;
+	char *dir_name = malloc(sizeof(char) * (dir_name_length_without_nullterm + 1));
+
+	strncpy(dir_name, path + base_path_length_without_nullterm, dir_name_length_without_nullterm);
+	dir_name[dir_name_length_without_nullterm] = '\0';
+
+
+	struct inode base_dir_inode;
+	get_node_by_path(base_path, ROOT_INO, &base_dir_inode);
+
+	return dir_remove(base_dir_inode, dir_name, strlen(dir_name));
+
 	return 0;
 }
 
