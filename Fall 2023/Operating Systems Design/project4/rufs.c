@@ -410,7 +410,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 	// Step 2: Check if fname exist
 	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
 	struct dirent found_dir_entry;
-	if(dir_find(dir_inode.ino, fname, name_len, &found_dir_entry) == EXIT_FAILURE){
+	if(dir_find(dir_inode.ino, fname, name_len, &found_dir_entry) == -1){
 		return EXIT_FAILURE;
 	}
 
@@ -447,7 +447,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 		memcpy(target_directory, path + start_ind, end_ind - start_ind + 1);
 		if (path[end_ind] == '/') target_directory[end_ind - start_ind] = '\0';
 		debug("get_node_by_path(): taking a look at \"%s\"\n", target_directory);
-        if (dir_find(current_ino, target_directory, end_ind - start_ind + 1, current_dirent) == EXIT_FAILURE) {
+        if (dir_find(current_ino, target_directory, end_ind - start_ind + 1, current_dirent) == -1) {
 			free(current_dirent);
 			free(target_directory);
             return -1;
@@ -530,7 +530,6 @@ int rufs_mkfs() {
 	rootdir_inode->size = 0/*BLOCK_SIZE*/;
 	rootdir_inode->type = DIRECTORY;
 	rootdir_inode->valid = TRUE;
-	rootdir_inode->vstat.st_mode = DIRECTORY_MODE;
 	rootdir_inode->vstat.st_atime = rootdir_inode->vstat.st_mtime = time(NULL);
 	// Write data to disk
 	if (bio_write_multi(0, superblock_block_size, superblock) != EXIT_SUCCESS) return EXIT_FAILURE;
@@ -602,13 +601,14 @@ static int rufs_getattr(const char *path, struct stat *stbuf) {
 		return -ENOENT;
 	}
 	memset(stbuf, 0, sizeof(struct stat));
-	stbuf->st_mode = inode->vstat.st_mode;
+	stbuf->st_mode = inode->type == DIRECTORY ? DIRECTORY_MODE : FILE_MODE;
 	stbuf->st_nlink = inode->link;
 	stbuf->st_uid = getuid();
 	stbuf->st_gid = getgid();
 	stbuf->st_size = inode->size;
-	stbuf->st_atime = inode->vstat.st_atime;
+	stbuf->st_atime = inode->vstat.st_atime = time(NULL);
 	stbuf->st_mtime = inode->vstat.st_mtime;
+	writei(inode->ino, inode);
 	pthread_mutex_unlock(&mutex);
 	free(inode);
 	debug("rufs_getattr(): EXIT\n");
@@ -686,6 +686,8 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 		}
 	}
 	end:
+	time(&inode->vstat.st_atime);
+	writei(inode->ino, inode);
 	pthread_mutex_unlock(&mutex);
 	free(inode);
 	free(base);
@@ -760,7 +762,6 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	base_inode->size = 0;
 	base_inode->type = DIRECTORY;
 	base_inode->valid = TRUE;
-	base_inode->vstat.st_mode = DIRECTORY_MODE;
 	base_inode->vstat.st_atime = base_inode->vstat.st_mtime = time(NULL);
 	writei(base_ino, base_inode);
 	pthread_mutex_unlock(&mutex);
@@ -855,7 +856,6 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	base_inode->size = 0;
 	base_inode->type = FILE;
 	base_inode->valid = TRUE;
-	base_inode->vstat.st_mode = FILE_MODE;
 	base_inode->vstat.st_mtime = base_inode->vstat.st_atime = time(NULL);
 	writei(base_ino, base_inode);
 	pthread_mutex_unlock(&mutex);
@@ -1087,6 +1087,8 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 		bytes_read += bytes_to_read;
 		block_offset = 0;
     }
+	time(&inode->vstat.st_mtime);
+	writei(inode->ino, inode);
 	pthread_mutex_unlock(&mutex);
     free(inode);
     free(block_buffer);

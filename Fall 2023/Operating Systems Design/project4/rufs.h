@@ -9,8 +9,8 @@
 #include <linux/limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <stdarg.h> // User-defined import
-#include <pthread.h> // User-defined import
+#include <stdarg.h> // User-defined
+#include <pthread.h> // User-defined
 
 #ifndef _TFS_H
 #define _TFS_H
@@ -26,8 +26,8 @@
 #define DIRECTORY 0
 #define FILE 1
 
-#define DIRECTORY_MODE S_IFDIR | 0755;
-#define FILE_MODE S_IFREG | 0755;
+#define DIRECTORY_MODE (S_IFDIR | 0755)
+#define FILE_MODE (S_IFREG | 0755)
 
 #define FALSE 0
 #define TRUE 1
