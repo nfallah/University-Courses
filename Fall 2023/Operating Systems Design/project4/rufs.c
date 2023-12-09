@@ -292,7 +292,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 void remove_data_block(int data_block_number){
 
 	//clear data block
-	struct dirent *block_of_zeroes = malloc(sizeof(BLOCK_SIZE));
+	struct dirent *block_of_zeroes = malloc(BLOCK_SIZE);
 	biowrite(data_block_number, block_of_zeroes);
 	free(block_of_zeroes);
 
@@ -319,14 +319,14 @@ void remove_inode(int inode_number){
 
 void remove_this_file(struct inode inode_of_file_to_remove){
 
-	struct dirent *block_of_mem = malloc(sizeof(BLOCK_SIZE));
-
 	//clear any allocated blocks pointed to directly
 	for(int direct_pointer_index = 0; direct_pointer_index < 16; direct_pointer_index ++){
 		if(inode_of_file_to_remove.direct_ptr[direct_pointer_index] != 0){
 			remove_data_block(inode_of_file_to_remove.direct_ptr[direct_pointer_index]);
 		}
 	}
+
+	int *data_block_number_array = malloc(BLOCK_SIZE);
 
 	//clear any blocks used by indirect pointers
 	for(int indirect_pointer_index = 0; indirect_pointer_index < 8; indirect_pointer_index ++){
@@ -336,12 +336,12 @@ void remove_this_file(struct inode inode_of_file_to_remove){
 			continue;
 		}
 
-		bio_read(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index], block_of_mem);
+		bio_read(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index], data_block_number_array);
 		
-		//free the blocks pointed to by dirents in indeirect block
-		for(int direct_pointer_index = 0; direct_pointer_index < 16; direct_pointer_index ++){
-			if(inode_of_file_to_remove.direct_ptr[direct_pointer_index] != 0){
-				remove_data_block(inode_of_file_to_remove.direct_ptr[direct_pointer_index]);
+		//free the blocks pointed to by dirents in indirect block
+		for(int indirect_block_index = 0; indirect_block_index < BLOCK_SIZE / sizeof(int); indirect_block_index ++){
+			if(data_block_number_array[indirect_block_index] != 0){
+				remove_data_block(data_block_number_array[indirect_block_index]);
 			}
 		}
 
@@ -349,13 +349,13 @@ void remove_this_file(struct inode inode_of_file_to_remove){
 		remove_data_block(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index]);
 	}
 
-	free(block_of_mem);
+	free(data_block_number_array);
 	remove_inode(inode_of_file_to_remove.ino);
 }
 
 void remove_this_dir(struct inode inode_of_dir_to_remove){
 
-	struct dirent *block_of_mem = malloc(sizeof(BLOCK_SIZE));
+	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
 
 	//this loop deletes files and directories inside of this directory
 	for(int direct_pointer_index = 0; direct_pointer_index < 16; direct_pointer_index ++){
