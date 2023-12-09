@@ -318,6 +318,11 @@ void remove_inode(int inode_number){
 }
 
 void remove_this_file(struct inode inode_of_file_to_remove){
+	if(inode_of_file_to_remove.link > 1){
+		inode_of_file_to_remove.link --;
+		writei(inode_of_file_to_remove.ino, &inode_of_file_to_remove);
+		return;
+	}
 
 	//clear any allocated blocks pointed to directly
 	for(int direct_pointer_index = 0; direct_pointer_index < 16; direct_pointer_index ++){
@@ -384,8 +389,6 @@ void remove_this_dir(struct inode inode_of_dir_to_remove){
 			else{
 				remove_this_file(inode_of_file_to_remove);
 			}
-			
-			
 		}
 	}
 
