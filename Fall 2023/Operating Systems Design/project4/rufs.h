@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdarg.h> // User-defined import
-#include <pthread.h> / User-defined import
+#include <pthread.h> // User-defined import
 
 #ifndef _TFS_H
 #define _TFS_H
