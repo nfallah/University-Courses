@@ -127,8 +127,8 @@ int writei(uint16_t ino, struct inode *inode) {
 }
 
 int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, size_t name_len, int *out_direct_pointer_index, int *out_block_dirent_index, struct dirent *out_dirent){
-	debug("dir_find(): ENTER\n");
-    debug("dir_find(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
+	debug("dir_find_entry_and_location(): ENTER\n");
+    debug("dir_find_entry_and_location(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
     
     void *base = malloc(BLOCK_SIZE);
     if (!base) {
@@ -153,9 +153,9 @@ int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, si
 				return -1;
 			}
             struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
-			debug("dir_find(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
+			debug("dir_find_entry_and_location(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
             if (current_dirent->valid == TRUE && strcmp(current_dirent->name, fname) == 0) {
-				debug("dir_find(): SUCCESSFULLY FOUND DIRENT \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
+				debug("dir_find_entry_and_location(): SUCCESSFULLY FOUND DIRENT \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
                 free(base);
 				*out_direct_pointer_index = i;
 				*out_block_dirent_index = j;
@@ -166,8 +166,8 @@ int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, si
         }
     }
     free(base);
-	debug("dir_find(): TARGET DIRENT \"%s\" NOT LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
-    debug("dir_find(): EXIT\n");
+	debug("dir_find_entry_and_location(): TARGET DIRENT \"%s\" NOT LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
+    debug("dir_find_entry_and_location(): EXIT\n");
     return -1;
 }
 
