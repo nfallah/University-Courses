@@ -126,7 +126,7 @@ int writei(uint16_t ino, struct inode *inode) {
 	return EXIT_SUCCESS;
 }
 
-int dir_find_entry_location(struct inode inode_of_dir, const char *fname, int *out_direct_pointer_index, int *out_block_dirent_index){
+int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, int *out_direct_pointer_index, int *out_block_dirent_index, struct dirent *out_dirent){
 	debug("dir_find(): ENTER\n");
     debug("dir_find(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
     
@@ -159,6 +159,7 @@ int dir_find_entry_location(struct inode inode_of_dir, const char *fname, int *o
                 free(base);
 				*out_direct_pointer_index = i;
 				*out_block_dirent_index = j;
+				memcpy(out_dirent, current_dirent, sizeof(struct dirent));
                 return EXIT_SUCCESS;
             }
             size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
@@ -184,18 +185,8 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
         return -1;
     }
 
-    int ret_val = dir_find_entry_location(inode_of_dir, fname, &direct_pointer_index, &block_dirent_index);
+    return dir_find_entry_and_location(inode_of_dir, fname, &direct_pointer_index, &block_dirent_index, dirent);
 
-	if(ret_val != EXIT_SUCCESS){
-		return ret_val;
-	}
-
-	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
-	bio_read(inode_of_dir.direct_ptr[direct_pointer_index], block_of_mem);
-
-	memcpy(dirent, block_of_mem + block_dirent_index, sizeof(struct dirent));
-	
-	return EXIT_SUCCESS;
 }
 
 // Status: COMPLETE
