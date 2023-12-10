@@ -139,35 +139,29 @@ void full_test_in_directory(char *parent_directory, int depth){
 }
 
 char *get_base_path(){
-	char *current_path = calloc(count * 10, sizeof(char));
+	char *current_path = calloc(1000, sizeof(char));
 
-    strcpy(parent_path, TESTDIR);
+    strcpy(current_path, TESTDIR);
 
 	return current_path;
-}
-
-void create_deep_directory(int limit){
-    if(count >= limit){
-        return;
-    }
-
-    char *current_path = get_base_path();
-
-    for(int i = 0; i < limit; i++){
-        full_test_in_directory(current_path, i);
-		strcat(curr_path, "/files");
-    }
-
-	free(current_path);
 }
 
 char *make_dir_path_at_depth(int depth){
 	char *current_path = get_base_path();
 
 	for(int i = 0; i < depth; i++){
-		strcat(base_path, "/files");
+		strcat(current_path, "/files");
 	}
 	return current_path;
+}
+
+void create_deep_directory(int limit){
+
+    for(int i = 0; i < limit; i++){
+		char *current_path = make_dir_path_at_depth(i);
+        full_test_in_directory(current_path, i);
+		free(current_path);
+    }
 }
 
 void delete_at_depth(int depth){
@@ -175,14 +169,14 @@ void delete_at_depth(int depth){
     char *current_path = make_dir_path_at_depth(depth);
 
 	//if(unlink) maybe try an unlink or something
-
-	if ((ret = rmdir(current_path, DIRPERM)) < 0) {
+	int ret;
+	if ((ret = rmdir(current_path)) < 0) {
 		perror("mkdir");
 		printf("failed to recurively delete in directory %s which is depth %d \n", current_path, depth);
 		exit(1);
 	}
 
-	free(current_path)
+	free(current_path);
 
 }
 
@@ -190,11 +184,13 @@ int main(int argc, char **argv) {
 	create_deep_directory(10);
 	delete_at_depth(5);
 
+	DIR *dir;
+
 	char *dir_at_depth = make_dir_path_at_depth(5);
 
-	if ((dir = opendir(base_path)) != NULL) {
+	if ((dir = opendir(dir_at_depth)) != NULL) {
 		perror("opendir");
-		printf("Somehow opened a dir that should be deleted %d \n", depth);
+		printf("Somehow opened a dir that should be deleted\n");
 		exit(1);
 	}
 
@@ -202,9 +198,9 @@ int main(int argc, char **argv) {
 
 	dir_at_depth = make_dir_path_at_depth(4);
 
-	if ((dir = opendir(base_path)) == NULL) {
+	if ((dir = opendir(dir_at_depth)) == NULL) {
 		perror("opendir");
-		printf("Couldn't open a dir that shouldn't be deleted %d \n", depth);
+		printf("Couldn't open a dir that shouldn't be deleted\n");
 		exit(1);
 	}
 
@@ -217,7 +213,7 @@ int main(int argc, char **argv) {
 
 	if ((dir = opendir(base_path)) == NULL) {
 		perror("opendir");
-		printf("Couldn't open a dir that shouldn't be deleted %d \n", depth);
+		printf("Couldn't open a dir that shouldn't be deleted \n");
 		exit(1);
 	}
 
@@ -225,9 +221,9 @@ int main(int argc, char **argv) {
 
 	dir_at_depth = make_dir_path_at_depth(1);
 
-	if ((dir = opendir(base_path)) != NULL) {
+	if ((dir = opendir(dir_at_depth)) != NULL) {
 		perror("opendir");
-		printf("Somehow opened a dir that should be deleted %d \n", depth);
+		printf("Somehow opened a dir that should be deleted \n");
 		exit(1);
 	}
 	
