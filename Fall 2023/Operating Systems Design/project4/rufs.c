@@ -307,11 +307,13 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 //clears data block and marks it available in data block bitmap
 void remove_data_block(int data_block_number){
 
+	// should perhaps add sanity checks (number is in range of 0 to superblock->max_dnum)
+
 	//clear data block
 	struct dirent *block_of_zeroes = malloc(BLOCK_SIZE);
 	memset(block_of_zeroes, 0, BLOCK_SIZE);
-	bio_write(data_block_number, block_of_zeroes);
-	free(block_of_zeroes);
+	bio_write_multi(data_block_number, 1, block_of_zeroes);
+	//free(block_of_zeroes);
 
 	//make data block available in data bitmap
 	bitmap_t data_bitmap = get_data_bitmap(superblock);
@@ -339,11 +341,13 @@ void remove_inode(int inode_number){
 //removes the specified file, note it is not actually removed unless its link count drops to 0
 void remove_this_file(struct inode inode_of_file_to_remove){
 
-	if(inode_of_file_to_remove.link > 1){
-		inode_of_file_to_remove.link --;
+	// pretty sure this being called for a directory is why the directory inode is why there is a leak, but its link count will always be > 1 (min 2)
+	// commented out for now.
+	/*if(inode_of_file_to_remove.link > 1){
+		inode_of_file_to_remove.link--;
 		writei(inode_of_file_to_remove.ino, &inode_of_file_to_remove);
 		return;
-	}
+	}*/
 
 	//clear any allocated blocks pointed to directly
 	for(int direct_pointer_index = 0; direct_pointer_index < 16; direct_pointer_index ++){
@@ -358,11 +362,12 @@ void remove_this_file(struct inode inode_of_file_to_remove){
 	for(int indirect_pointer_index = 0; indirect_pointer_index < 8; indirect_pointer_index ++){
 		
 		//0 means it doesn't point to a block
+		// all dirents should reach this continue statement, just something to note.
 		if(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index] == 0){
 			continue;
 		}
 
-		bio_read(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index], data_block_number_array);
+		bio_read_multi(inode_of_file_to_remove.indirect_ptr[indirect_pointer_index], 1, data_block_number_array);
 		
 		//free the blocks pointed to by dirents in indirect block
 		for(int indirect_block_index = 0; indirect_block_index < BLOCK_SIZE / sizeof(int); indirect_block_index ++){
@@ -383,11 +388,11 @@ void remove_this_file(struct inode inode_of_file_to_remove){
 //clears an entry that was occupied in a directory by a now removed file
 int remove_entry_from_directory(struct inode dir_inode, int direct_pointer_index, int block_dirent_index){
 	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
-	int err_code = bio_read(dir_inode.direct_ptr[direct_pointer_index], block_of_mem);
+	int err_code = bio_read_multi(dir_inode.direct_ptr[direct_pointer_index], 1, block_of_mem);
 
 	if(err_code == EXIT_SUCCESS){
 		memset(block_of_mem + block_dirent_index, 0, sizeof(struct dirent));
-		err_code = bio_write(dir_inode.direct_ptr[direct_pointer_index], block_of_mem);
+		err_code = bio_write_multi(dir_inode.direct_ptr[direct_pointer_index], 1, block_of_mem);
 
 	}
 
@@ -409,12 +414,12 @@ void remove_this_dir(struct inode inode_of_dir_to_remove){
 			continue;
 		}
 
-		bio_read(inode_of_dir_to_remove.direct_ptr[direct_pointer_index], block_of_mem);
+		bio_read_multi(inode_of_dir_to_remove.direct_ptr[direct_pointer_index], 1, block_of_mem);
 
 		for(int directory_entry_index = 0; directory_entry_index < BLOCK_SIZE / sizeof(struct dirent); directory_entry_index ++){
 			struct dirent curr_dir_entry = block_of_mem[directory_entry_index];
 
-			if(curr_dir_entry.valid == FALSE){
+			if(curr_dir_entry.valid == FALSE || strcmp(curr_dir_entry.name, ".") == 0 || strcmp(curr_dir_entry.name, "..") == 0){
 				continue;
 			}
 
@@ -615,6 +620,7 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 	// Step 1b: If disk file is found, just initialize in-memory data structures
 	// and read superblock from disk
 	debug("rufs_init(): ENTER\n");
+	boolean init = FALSE;
 	pthread_mutex_lock(&mutex);
 	if (access(diskfile_path, F_OK) != 0) {
 		if (rufs_mkfs() != EXIT_SUCCESS) {
@@ -622,6 +628,7 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 			pthread_mutex_unlock(&mutex);
 			return NULL;
 		}
+		init = TRUE;
 	} else if (dev_open(diskfile_path) == -1) {
 		pthread_mutex_unlock(&mutex);
 		return NULL;
@@ -630,6 +637,15 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 		dev_close(diskfile_path);
 		pthread_mutex_unlock(&mutex);
 		return NULL;
+	}
+	if (init == TRUE) {
+		struct inode *rootdir_inode = malloc(sizeof(struct inode));
+		memset(rootdir_inode, 0, sizeof(struct inode));
+		readi(ROOT_INO, rootdir_inode);
+		dir_add(*rootdir_inode, 0, ".", 1);
+		dir_add(*rootdir_inode, 0, "..", 2);
+		writei(ROOT_INO, rootdir_inode);
+		free(rootdir_inode);
 	}
 	pthread_mutex_unlock(&mutex);
 	debug("rufs_init(): EXIT\n");
@@ -741,7 +757,7 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 		for (unsigned int j = 0; j < block_dirent_size; j++) {
 			if (size < sizeof(struct dirent)) goto end;
 			struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
-			if (current_dirent->valid == TRUE) {
+			if (current_dirent->valid == TRUE && strcmp(current_dirent->name, ".") != 0 && strcmp(current_dirent->name, "..") != 0) {
 				filler(buffer, current_dirent->name, NULL, 0);
 				debug("rufs_readdir(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
 			}
@@ -827,6 +843,8 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	base_inode->valid = TRUE;
 	base_inode->vstat.st_atime = base_inode->vstat.st_mtime = time(NULL);
 	writei(base_ino, base_inode);
+	dir_add(*base_inode, base_ino, ".", 1);
+	dir_add(*base_inode, dir_inode->ino, "..", 2);
 	pthread_mutex_unlock(&mutex);
 	free(path_dir);
 	free(path_base);
@@ -837,7 +855,7 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 }
 
 //splits a path into the base path and the final destination ex: /bar/foo/baz -> base: /bar/foo, name -> baz
-void split_path_into_base_path_and_name(const char *path, char **base_path_out, char **name_out){
+/*void split_path_into_base_path_and_name(const char *path, char **base_path_out, char **name_out){
 	int ind_of_last_slash;
 	for(int curr_slash_ind = 0; curr_slash_ind != -1; curr_slash_ind = split_string(ind_of_last_slash, path)){
 		ind_of_last_slash = curr_slash_ind;
@@ -856,16 +874,16 @@ void split_path_into_base_path_and_name(const char *path, char **base_path_out, 
 	strncpy(*name_out, path + base_path_length_without_nullterm, dir_name_length_without_nullterm);
 	(*name_out)[dir_name_length_without_nullterm] = '\0';
 
-}
+}*/
 
 //removes file or directory, specified by file_to_remove_type
 static int remove_given_path(const char *path, int file_to_remove_type){
 	char *dir_copy = strdup(path);
-	if (!dir_copy) return -1; // not sure if correct success flag, correct as needed
+	if (!dir_copy) return EXIT_FAILURE; // not sure if correct success flag, correct as needed
 	char *base_copy = strdup(path);
 	if (!base_copy) {
 		free(dir_copy);
-		return -1; // same
+		return -1; // same concern as above
 	}
 	char *dir_name = dirname(dir_copy);
 	char *base_name = basename(base_copy);
@@ -1109,6 +1127,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 		free(alloc_buffer);
         return -ENOSPC;
     }
+	boolean should_save = FALSE;
     int size_increase = 0;
     for (int i = starting_block_index; i <= ending_block_index; i++) {
 		int blkno;
@@ -1124,6 +1143,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 					return -ENOSPC;
 				}
 				size_increase += BLOCK_SIZE;
+				should_save = TRUE;
 				inode->direct_ptr[i] = blkno;
 				bio_write_multi(blkno, 1, block_buffer);
 			}
@@ -1141,7 +1161,8 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 					free(alloc_buffer);
 					return -ENOSPC;
 				}
-				size_increase += BLOCK_SIZE;
+				//size_increase += BLOCK_SIZE; // should realistically not contribute.
+				should_save = TRUE;
 				inode->indirect_ptr[ptr_index] = blkno;
 				bio_write_multi(blkno, 1, block_buffer);
 			}
@@ -1158,6 +1179,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 					return -ENOSPC;
 				}
 				size_increase += BLOCK_SIZE;
+				should_save = TRUE;
 				list[val_index] = blkno;
 				bio_write_multi(blkno, 1, block_buffer);
 				bio_write_multi(inode->indirect_ptr[ptr_index], 1, alloc_buffer);
@@ -1165,7 +1187,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 		}
     }
 	free(alloc_buffer);
-    if (size_increase > 0) {
+    if (should_save == TRUE) {
         inode->size += size_increase;
         writei(inode->ino, inode);
         update_data_bitmap(data_bitmap, TRUE, superblock);
