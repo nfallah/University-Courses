@@ -126,6 +126,7 @@ int writei(uint16_t ino, struct inode *inode) {
 	return EXIT_SUCCESS;
 }
 
+// find the directory entry of file fname within directory, also reports which direct pointer was used and the offset into the block where it was found
 int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, size_t name_len, int *out_direct_pointer_index, int *out_block_dirent_index, struct dirent *out_dirent){
 	debug("dir_find_entry_and_location(): ENTER\n");
     debug("dir_find_entry_and_location(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
@@ -321,11 +322,8 @@ void remove_inode(int inode_number){
 	update_inode_bitmap(inode_bitmap, TRUE, superblock);
 }
 
+//removes the specified file, note it is not actually removed unless its link count drops to 0
 void remove_this_file(struct inode inode_of_file_to_remove){
-
-	if(inode_of_file_to_remove.type != FILE){
-		return -EISDIR;
-	}
 
 	if(inode_of_file_to_remove.link > 1){
 		inode_of_file_to_remove.link --;
@@ -383,10 +381,8 @@ int remove_entry_from_directory(struct inode dir_inode, int direct_pointer_index
 	return err_code;
 }
 
+//removes the specified directory and recursively removes anything inside of it, directories can only be hard linked once so links are not counted
 void remove_this_dir(struct inode inode_of_dir_to_remove){
-	if(inode_of_dir_to_remove.type != DIRECTORY){
-		return -ENOTDIR;
-	}
 
 	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
 
@@ -426,8 +422,9 @@ void remove_this_dir(struct inode inode_of_dir_to_remove){
 	remove_this_file(inode_of_dir_to_remove);
 }
 
-//removes any either directory or file from in the parent directory corresponding to dir_inode
+//removes either directory or file from in the parent directory corresponding to dir_inode
 //if file_type_to_remove is -1, it will just remove it based on the file type it is
+// if file_type_to_remove is specified, we will return an error if the given file does not match the type expected
 int remove_from_dir(struct inode dir_inode, const char *fname, size_t name_len, int file_type_to_remove){
 	int direct_pointer_index;
 	int block_durent_index;
@@ -463,6 +460,7 @@ int remove_from_dir(struct inode dir_inode, const char *fname, size_t name_len, 
 	return EXIT_SUCCESS;
 }
 
+//almost unecessary at this point but left in due to project's requests
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
 	// Step 2: Check if fname exist
