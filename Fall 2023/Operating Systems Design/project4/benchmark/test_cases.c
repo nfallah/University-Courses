@@ -10,7 +10,7 @@
 #include <time.h>
 
 /* You need to change this macro to your TFS mount point*/
-#define TESTDIR "/tmp/nf340/mountdir"
+#define TESTDIR "/tmp/netID/mountdir"
 
 #define N_FILES 100
 #define BLOCKSIZE 4096

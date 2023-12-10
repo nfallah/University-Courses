@@ -34,7 +34,7 @@
 
 #define ROOT_INO 0
 
-#define DEBUG TRUE // Enable for debug statements as the program is running.
+#define DEBUG FALSE // Enable for debug statements as the program is running.
 #define BENCHMARK FALSE // Enable for benchmark results when calling rufs_destroy().
 
 // Used for benchmarking
