@@ -13,4 +13,4 @@ stress_tests:
 	$(CC) $(CFLAGS) -o stress_tests stress_tests.c
 
 clean:
-	rm -rf simple_test test_case
+	rm -rf simple_test test_case stress_tests
