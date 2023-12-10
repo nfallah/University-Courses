@@ -132,6 +132,52 @@ int writei(uint16_t ino, struct inode *inode) {
 	return EXIT_SUCCESS;
 }
 
+// find the directory entry of file fname within directory, also reports which direct pointer was used and the offset into the block where it was found
+int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, size_t name_len, int *out_direct_pointer_index, int *out_block_dirent_index, struct dirent *out_dirent){
+	debug("dir_find_entry_and_location(): ENTER\n");
+    debug("dir_find_entry_and_location(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
+    
+    void *base = malloc(BLOCK_SIZE);
+    if (!base) {
+        return -1;
+    }
+    size_t inode_block_size = (inode_of_dir.size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    if (inode_block_size > 16 || inode_of_dir.type != DIRECTORY || inode_of_dir.valid == FALSE) {
+        free(base);
+        return -1;
+    }
+    size_t block_dirent_size = BLOCK_SIZE / sizeof(struct dirent),
+		size = inode_of_dir.size;
+    for (unsigned int i = 0; i < inode_block_size; i++) {
+        int block_num = inode_of_dir.direct_ptr[i];
+        if (bio_read_multi(block_num, 1, base) != EXIT_SUCCESS) {
+            free(base);
+            return -1;
+        }
+        for (unsigned int j = 0; j < block_dirent_size; j++) {
+            if (size < sizeof(struct dirent)) {
+				free(base);
+				return -1;
+			}
+            struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
+			debug("dir_find_entry_and_location(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
+            if (current_dirent->valid == TRUE && strcmp(current_dirent->name, fname) == 0) {
+				debug("dir_find_entry_and_location(): SUCCESSFULLY FOUND DIRENT \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
+                free(base);
+				*out_direct_pointer_index = i;
+				*out_block_dirent_index = j;
+				memcpy(out_dirent, current_dirent, sizeof(struct dirent));
+                return EXIT_SUCCESS;
+            }
+            size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
+        }
+    }
+    free(base);
+	debug("dir_find_entry_and_location(): TARGET DIRENT \"%s\" NOT LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
+    debug("dir_find_entry_and_location(): EXIT\n");
+    return -1;
+}
+
 /* 
  * directory operations
  */
@@ -142,57 +188,17 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 	// Step 2: Get data block of current directory from inode
   	// Step 3: Read directory's data block and check each directory entry.
   	// If the name matches, then copy directory entry to dirent structure
-    debug("dir_find(): ENTER\n");
-    debug("dir_find(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, ino);
-    struct inode *inode = malloc(sizeof(struct inode));
-    if (!inode) return -1;
-    if (readi(ino, inode) != EXIT_SUCCESS) {
-        free(inode);
+	
+	int direct_pointer_index;
+	int block_dirent_index;
+
+	struct inode inode_of_dir;
+    if (readi(ino, &inode_of_dir) != EXIT_SUCCESS) {
         return -1;
     }
-    void *base = malloc(BLOCK_SIZE);
-    if (!base) {
-        free(inode);
-        return -1;
-    }
-    size_t inode_block_size = (inode->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    if (inode_block_size > 16 || inode->type != DIRECTORY || inode->valid == FALSE) {
-        free(inode);
-        free(base);
-        return -1;
-    }
-    size_t block_dirent_size = BLOCK_SIZE / sizeof(struct dirent),
-		size = inode->size;
-    for (unsigned int i = 0; i < inode_block_size; i++) {
-        int block_num = inode->direct_ptr[i];
-        if (bio_read_multi(block_num, 1, base) != EXIT_SUCCESS) {
-            free(inode);
-            free(base);
-            return -1;
-        }
-        for (unsigned int j = 0; j < block_dirent_size; j++) {
-            if (size < sizeof(struct dirent)) {
-				free(inode);
-				free(base);
-				return -1;
-			}
-            struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
-			debug("dir_find(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
-            if (current_dirent->valid == TRUE && strcmp(current_dirent->name, fname) == 0) {
-                memcpy(dirent, current_dirent, sizeof(struct dirent));
-                free(inode);
-				debug("dir_find(): SUCCESSFULLY FOUND DIRENT \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
-                free(base);
-                return EXIT_SUCCESS;
-            }
-            size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
-        }
-    }
-    free(inode);
-    free(base);
-	debug("dir_find(): TARGET DIRENT \"%s\" NOT LOCATED IN INO \"%d\"\n", fname, ino);
-    debug("dir_find(): EXIT\n");
-    return -1;
+
+    return dir_find_entry_and_location(inode_of_dir, fname, name_len, &direct_pointer_index, &block_dirent_index, dirent);
+
 }
 
 // Status: COMPLETE
@@ -330,7 +336,9 @@ void remove_inode(int inode_number){
 }
 
 // Helper function
+//removes the specified file, note it is not actually removed unless its link count drops to 0
 void remove_this_file(struct inode inode_of_file_to_remove){
+
 	if(inode_of_file_to_remove.link > 1){
 		inode_of_file_to_remove.link --;
 		writei(inode_of_file_to_remove.ino, &inode_of_file_to_remove);
@@ -372,6 +380,23 @@ void remove_this_file(struct inode inode_of_file_to_remove){
 }
 
 // Helper function
+//clears an entry that was occupied in a directory by a now removed file
+int remove_entry_from_directory(struct inode dir_inode, int direct_pointer_index, int block_dirent_index){
+	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
+	int err_code = bio_read(dir_inode.direct_ptr[direct_pointer_index], block_of_mem);
+
+	if(err_code == EXIT_SUCCESS){
+		memset(block_of_mem + block_dirent_index, 0, sizeof(struct dirent));
+		err_code = bio_write(dir_inode.direct_ptr[direct_pointer_index], block_of_mem);
+
+	}
+
+	free(block_of_mem);
+
+	return err_code;
+}
+
+//removes the specified directory and recursively removes anything inside of it, directories can only be hard linked once so links are not counted
 void remove_this_dir(struct inode inode_of_dir_to_remove){
 
 	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
@@ -403,6 +428,7 @@ void remove_this_dir(struct inode inode_of_dir_to_remove){
 			else{
 				remove_this_file(inode_of_file_to_remove);
 			}
+			remove_entry_from_directory(inode_of_dir_to_remove, direct_pointer_index, directory_entry_index);
 		}
 	}
 
@@ -411,22 +437,51 @@ void remove_this_dir(struct inode inode_of_dir_to_remove){
 	remove_this_file(inode_of_dir_to_remove);
 }
 
-int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
-	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
-	// Step 2: Check if fname exist
-	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
+//removes either directory or file from in the parent directory corresponding to dir_inode
+//if file_type_to_remove is -1, it will just remove it based on the file type it is
+// if file_type_to_remove is specified, we will return an error if the given file does not match the type expected
+int remove_from_dir(struct inode dir_inode, const char *fname, size_t name_len, int file_type_to_remove){
+	int direct_pointer_index;
+	int block_durent_index;
 	struct dirent found_dir_entry;
-	if(dir_find(dir_inode.ino, fname, name_len, &found_dir_entry) == -1){
+	if(dir_find_entry_and_location(dir_inode, fname, name_len, &direct_pointer_index, &block_durent_index, &found_dir_entry) == -1){
 		return EXIT_FAILURE;
 	}
 
 	struct inode inode_of_file_to_remove;
 	readi(found_dir_entry.ino, &inode_of_file_to_remove);
 
-	remove_this_dir(inode_of_file_to_remove);
+	if(file_type_to_remove != -1){
+		if(file_type_to_remove == DIRECTORY && inode_of_file_to_remove.type != DIRECTORY){
+			return -ENOTDIR;
+		}
+		else if(file_type_to_remove != DIRECTORY && inode_of_file_to_remove.type == DIRECTORY){
+			return -EISDIR;
+		}
+	}
+
+	if(inode_of_file_to_remove.type == DIRECTORY){
+		remove_this_dir(inode_of_file_to_remove);
+	}
+	else if(inode_of_file_to_remove.type == FILE){
+		remove_this_file(inode_of_file_to_remove);
+	}
+	else{
+		return -1;
+	}
+	
+	remove_entry_from_directory(dir_inode, direct_pointer_index, block_durent_index);
+	
 	return EXIT_SUCCESS;
 }
 
+//almost unecessary at this point but left in due to project's requests
+int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
+	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
+	// Step 2: Check if fname exist
+	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
+	return remove_from_dir(dir_inode, fname, name_len, DIRECTORY);
+}
 /* 
  * namei operation
  */
@@ -781,6 +836,40 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	return 0;
 }
 
+//splits a path into the base path and the final destination ex: /bar/foo/baz -> base: /bar/foo, name -> baz
+void split_path_into_base_path_and_name(const char *path, char **base_path_out, char **name_out){
+	int ind_of_last_slash;
+	for(int curr_slash_ind = 0; curr_slash_ind != -1; curr_slash_ind = split_string(ind_of_last_slash, path)){
+		ind_of_last_slash = curr_slash_ind;
+	}
+	
+	int base_path_length_without_nullterm = ind_of_last_slash;
+	*base_path_out = malloc(sizeof(char) * (base_path_length_without_nullterm + 1));
+
+	strncpy(*base_path_out, path, base_path_length_without_nullterm);
+	(*base_path_out)[base_path_length_without_nullterm] = '\0';
+
+
+	int dir_name_length_without_nullterm = strlen(path) - ind_of_last_slash;
+	*name_out = malloc(sizeof(char) * (dir_name_length_without_nullterm + 1));
+
+	strncpy(*name_out, path + base_path_length_without_nullterm, dir_name_length_without_nullterm);
+	(*name_out)[dir_name_length_without_nullterm] = '\0';
+
+}
+
+//removes file or directory, specified by file_to_remove_type
+static int remove_given_path(const char *path, int file_to_remove_type){
+	char *base_path;
+	char *remove_target_name;
+	split_path_into_base_path_and_name(path, &base_path, &remove_target_name);
+
+	struct inode base_dir_inode;
+	get_node_by_path(base_path, ROOT_INO, &base_dir_inode);
+
+	return remove_from_dir(base_dir_inode, remove_target_name, strlen(remove_target_name), file_to_remove_type);
+}
+
 static int rufs_rmdir(const char *path) {
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 	// Step 2: Call get_node_by_path() to get inode of target directory
@@ -788,7 +877,8 @@ static int rufs_rmdir(const char *path) {
 	// Step 4: Clear inode bitmap and its data block
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 	// Step 6: Call dir_remove() to remove directory entry of target directory in its parent directory
-	return 0;
+
+	return remove_given_path(path, DIRECTORY);
 }
 
 static int rufs_releasedir(const char *path, struct fuse_file_info *fi) {
@@ -1111,7 +1201,8 @@ static int rufs_unlink(const char *path) {
 	// Step 4: Clear inode bitmap and its data block
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 	// Step 6: Call dir_remove() to remove directory entry of target file in its parent directory
-	return 0;
+
+	return remove_given_path(path, FILE);
 }
 
 static int rufs_truncate(const char *path, off_t size) {
