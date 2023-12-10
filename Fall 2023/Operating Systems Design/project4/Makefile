@@ -10,7 +10,9 @@ OBJ=rufs.o block.o
 rufs: $(OBJ)
 	$(CC) $(OBJ) $(LDFLAGS) -o rufs
 
+stress_tests:
+	$(CC) -g -o stress_tests stress_tests.c
+
 .PHONY: clean
 clean:
-	rm -f *.o rufs
-
+	rm -f *.o rufs stress_tests
