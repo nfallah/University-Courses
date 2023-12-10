@@ -9,7 +9,8 @@
 #include <linux/limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <stdarg.h> // User defined import
+#include <stdarg.h> // User-defined
+#include <pthread.h> // User-defined
 
 #ifndef _TFS_H
 #define _TFS_H
@@ -25,15 +26,20 @@
 #define DIRECTORY 0
 #define FILE 1
 
-#define DIRECTORY_MODE S_IFDIR | 0755
-#define FILE_MODE S_IFREG | 0755
+#define DIRECTORY_MODE (S_IFDIR | 0755)
+#define FILE_MODE (S_IFREG | 0755)
 
 #define FALSE 0
 #define TRUE 1
 
-#define DEBUG FALSE
-
 #define ROOT_INO 0
+
+#define DEBUG FALSE // Enable for debug statements as the program is running.
+#define BENCHMARK FALSE // Enable for benchmark results when calling rufs_destroy().
+
+// Used for benchmarking
+extern unsigned long long TOTAL_INODE_BLOCKS,
+	TOTAL_DATA_BLOCKS;
 
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
@@ -162,6 +168,7 @@ int get_avail_ino_no_wr(bitmap_t inode_bitmap, struct superblock *superblock) {
 		for (int j = 0; j < 8; j++) {
 			if (get_bitmap(inode_bitmap, i * 8 + j) == FALSE) {
 				set_bitmap(inode_bitmap, i * 8 + j);
+				TOTAL_INODE_BLOCKS++;
 				return i * 8 + j;
 			}
 		}
@@ -223,6 +230,7 @@ int get_avail_blkno_no_wr(bitmap_t data_bitmap, struct superblock *superblock) {
 		for (int j = 0; j < 8; j++) {
 			if (get_bitmap(data_bitmap, i * 8 + j) == FALSE) {
 				set_bitmap(data_bitmap, i * 8 + j);
+				TOTAL_DATA_BLOCKS++;
 				return i * 8 + j;
 			}
 		}

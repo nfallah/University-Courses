@@ -24,13 +24,16 @@
 
 char diskfile_path[PATH_MAX];
 
-// Declare your in-memory data structures here
-struct superblock *superblock;
+// Used for benchmarks
+unsigned long long TOTAL_INODE_BLOCKS = 0,
+	TOTAL_DATA_BLOCKS = 0;
 
-/* 
- * Get available inode number from bitmap
- * Status: COMPLETE
- */
+// Declare your in-memory data structures here
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static struct superblock *superblock;
+
+// Get available inode number from bitmap
+// Status: COMPLETE
 int get_avail_ino() {
 	// Step 1: Read inode bitmap from disk
 	// Step 2: Traverse inode bitmap to find an available slot
@@ -47,6 +50,7 @@ int get_avail_ino() {
 					free(inode_bitmap);
 					return -1;
 				}
+				TOTAL_INODE_BLOCKS++;
 				return i * 8 + j;
 			}
 		}
@@ -55,10 +59,8 @@ int get_avail_ino() {
 	return -1;
 }
 
-/* 
- * Get available data block number from bitmap
- * Status: COMPLETE
- */
+// Get available data block number from bitmap
+// Status: COMPLETE
 int get_avail_blkno() {
 	// Step 1: Read data block bitmap from disk
 	// Step 2: Traverse data block bitmap to find an available slot
@@ -75,6 +77,7 @@ int get_avail_blkno() {
 					free(data_bitmap);
 					return -1;
 				}
+				TOTAL_DATA_BLOCKS++;
 				return i * 8 + j;
 			}
 		}
@@ -89,6 +92,9 @@ int get_avail_blkno() {
 
 // Status: COMPLETE
 int readi(uint16_t ino, struct inode *inode) {
+	// Step 1: Get the inode's on-disk block number
+  	// Step 2: Get offset of the inode in the inode on-disk block
+  	// Step 3: Read the block from disk and then copy into inode structure
 	if (ino >= superblock->max_inum) return -1;
 	size_t inodes_byte_size = superblock->max_inum * sizeof(struct inode),
 		inodes_block_size = (inodes_byte_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -178,6 +184,11 @@ int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, si
 
 // Status: COMPLETE
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
+	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
+	// Step 2: Get data block of current directory from inode
+  	// Step 3: Read directory's data block and check each directory entry.
+  	// If the name matches, then copy directory entry to dirent structure
+	
 	int direct_pointer_index;
 	int block_dirent_index;
 
@@ -298,16 +309,18 @@ void remove_data_block(int data_block_number){
 
 	//clear data block
 	struct dirent *block_of_zeroes = malloc(BLOCK_SIZE);
-	biowrite(data_block_number, block_of_zeroes);
+	memset(block_of_zeroes, 0, BLOCK_SIZE);
+	bio_write(data_block_number, block_of_zeroes);
 	free(block_of_zeroes);
 
 	//make data block available in data bitmap
 	bitmap_t data_bitmap = get_data_bitmap(superblock);
 	unset_bitmap(data_bitmap, data_block_number);
 	update_data_bitmap(data_bitmap, TRUE, superblock);
-
+	free(block_of_zeroes);
 }
 
+// Helper function
 //clears an inode (setting mem to all 0 will make it invalid) and removes it from inode bitmap
 void remove_inode(int inode_number){
 
@@ -318,10 +331,11 @@ void remove_inode(int inode_number){
 
 	//mark cleared inode as available in inode bitmap
 	bitmap_t inode_bitmap = get_inode_bitmap(superblock);
-	unset_bitmap(inode_bitmap, inode_bitmap);
+	unset_bitmap(inode_bitmap, inode_number);
 	update_inode_bitmap(inode_bitmap, TRUE, superblock);
 }
 
+// Helper function
 //removes the specified file, note it is not actually removed unless its link count drops to 0
 void remove_this_file(struct inode inode_of_file_to_remove){
 
@@ -365,6 +379,7 @@ void remove_this_file(struct inode inode_of_file_to_remove){
 	remove_inode(inode_of_file_to_remove.ino);
 }
 
+// Helper function
 //clears an entry that was occupied in a directory by a now removed file
 int remove_entry_from_directory(struct inode dir_inode, int direct_pointer_index, int block_dirent_index){
 	struct dirent *block_of_mem = malloc(BLOCK_SIZE);
@@ -429,7 +444,7 @@ int remove_from_dir(struct inode dir_inode, const char *fname, size_t name_len, 
 	int direct_pointer_index;
 	int block_durent_index;
 	struct dirent found_dir_entry;
-	if(dir_find_entry_and_location(dir_inode, fname, name_len, &direct_pointer_index, &block_durent_index, &found_dir_entry) == EXIT_FAILURE){
+	if(dir_find_entry_and_location(dir_inode, fname, name_len, &direct_pointer_index, &block_durent_index, &found_dir_entry) == -1){
 		return EXIT_FAILURE;
 	}
 
@@ -473,6 +488,8 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
 // Status: COMPLETE
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
+	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
+	// Note: You could either implement it in a iterative way or recursive way
     debug("get_node_by_path(): ENTER\n");
     debug("get_node_by_path(): STARTING PATH IS \"%s\"\n", path);
     if (!path || path[0] != '/') return -1;
@@ -491,7 +508,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 		memcpy(target_directory, path + start_ind, end_ind - start_ind + 1);
 		if (path[end_ind] == '/') target_directory[end_ind - start_ind] = '\0';
 		debug("get_node_by_path(): taking a look at \"%s\"\n", target_directory);
-        if (dir_find(current_ino, target_directory, end_ind - start_ind + 1, current_dirent) != EXIT_SUCCESS) {
+        if (dir_find(current_ino, target_directory, end_ind - start_ind + 1, current_dirent) == -1) {
 			free(current_dirent);
 			free(target_directory);
             return -1;
@@ -524,7 +541,6 @@ int rufs_mkfs() {
 	// initialize data block bitmap
 	// update bitmap information for root directory
 	// update inode for root directory
-
 	/* Hierarchy of blocks:
 	 * 1) Superblock
 	 * 2) Inode bitmap
@@ -532,7 +548,6 @@ int rufs_mkfs() {
 	 * 4) Inodes
 	 * 5) Data
 	 */
-
 	debug("rufs_mkfs(): ENTER\n");
 	dev_init(diskfile_path);
 	// Superblock initialization
@@ -576,7 +591,6 @@ int rufs_mkfs() {
 	rootdir_inode->size = 0/*BLOCK_SIZE*/;
 	rootdir_inode->type = DIRECTORY;
 	rootdir_inode->valid = TRUE;
-	rootdir_inode->vstat.st_mode = S_IFDIR | 0755;
 	rootdir_inode->vstat.st_atime = rootdir_inode->vstat.st_mtime = time(NULL);
 	// Write data to disk
 	if (bio_write_multi(0, superblock_block_size, superblock) != EXIT_SUCCESS) return EXIT_FAILURE;
@@ -601,28 +615,23 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 	// Step 1b: If disk file is found, just initialize in-memory data structures
 	// and read superblock from disk
 	debug("rufs_init(): ENTER\n");
-	//boolean init = FALSE;
+	pthread_mutex_lock(&mutex);
 	if (access(diskfile_path, F_OK) != 0) {
 		if (rufs_mkfs() != EXIT_SUCCESS) {
 			dev_close();
+			pthread_mutex_unlock(&mutex);
 			return NULL;
 		}
-		//init = TRUE;
-	} else if (dev_open(diskfile_path) == -1) { return NULL; }
-	if (!(superblock = get_superblock())) {
-		dev_close(diskfile_path);
+	} else if (dev_open(diskfile_path) == -1) {
+		pthread_mutex_unlock(&mutex);
 		return NULL;
 	}
-	/*if (init) {
-		struct inode *rootdir_inode = malloc(sizeof(struct inode));
-		memset(rootdir_inode, 0, sizeof(struct inode));
-		readi(ROOT_INO, rootdir_inode);
-		rootdir_inode->direct_ptr[0] = get_avail_blkno();
-		dir_add(*rootdir_inode, 0, ".", 1);
-		dir_add(*rootdir_inode, 0, "..", 2);
-		writei(ROOT_INO, rootdir_inode);
-		free(rootdir_inode);
-	}*/
+	if (!(superblock = get_superblock())) {
+		dev_close(diskfile_path);
+		pthread_mutex_unlock(&mutex);
+		return NULL;
+	}
+	pthread_mutex_unlock(&mutex);
 	debug("rufs_init(): EXIT\n");
 	return NULL;
 }
@@ -630,10 +639,13 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 // Status: COMPLETE
 static void rufs_destroy(void *userdata) {
 	// Step 1: De-allocate in-memory data structures
-	// Step 2: Close diskfile
+	// Step 2: Close diskfile 
+	if (BENCHMARK) printf("TOTAL INODE BLOCKS ALLOCATED: %llu\nTOTAL DATA BLOCKS ALLOCATED: %llu\n", TOTAL_INODE_BLOCKS, TOTAL_DATA_BLOCKS);
 	debug("rufs_destroy(): ENTER\n");
+	pthread_mutex_lock(&mutex);
 	free(superblock);
 	dev_close(diskfile_path);
+	pthread_mutex_unlock(&mutex);
 	debug("rufs_destroy(): EXIT\n");
 }
 
@@ -644,17 +656,23 @@ static int rufs_getattr(const char *path, struct stat *stbuf) {
 	debug("rufs_getattr(): ENTER\n");
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return -ENOMEM;
+	pthread_mutex_lock(&mutex);
 	if (get_node_by_path(path, ROOT_INO, inode) != EXIT_SUCCESS) {
+		pthread_mutex_unlock(&mutex);
 		free(inode);
 		return -ENOENT;
 	}
 	memset(stbuf, 0, sizeof(struct stat));
-	stbuf->st_mode = inode->vstat.st_mode;
+	stbuf->st_mode = inode->type == DIRECTORY ? DIRECTORY_MODE : FILE_MODE;
 	stbuf->st_nlink = inode->link;
 	stbuf->st_uid = getuid();
 	stbuf->st_gid = getgid();
 	stbuf->st_size = inode->size;
+	stbuf->st_blocks = (inode->size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+	stbuf->st_atime = inode->vstat.st_atime = time(NULL);
 	stbuf->st_mtime = inode->vstat.st_mtime;
+	writei(inode->ino, inode);
+	pthread_mutex_unlock(&mutex);
 	free(inode);
 	debug("rufs_getattr(): EXIT\n");
 	return 0;
@@ -667,14 +685,18 @@ static int rufs_opendir(const char *path, struct fuse_file_info *fi) {
 	debug("rufs_opendir(): ENTER\n");
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return -ENOMEM;
+	pthread_mutex_lock(&mutex);
 	if (get_node_by_path(path, ROOT_INO, inode) != EXIT_SUCCESS) {
+		pthread_mutex_unlock(&mutex);
 		free(inode);
 		return -1;
 	}
 	if (inode->type != DIRECTORY) {
+		pthread_mutex_unlock(&mutex);
 		free(inode);
 		return -ENOTDIR;
 	}
+	pthread_mutex_unlock(&mutex);
 	free(inode);
 	debug("rufs_opendir(): EXIT\n");
     return 0;
@@ -692,12 +714,15 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 		free(inode);
 		return -ENOMEM;
 	}
+	pthread_mutex_lock(&mutex);
     if (get_node_by_path(path, ROOT_INO, inode) != EXIT_SUCCESS) {
+		pthread_mutex_unlock(&mutex);
         free(inode);
 		free(base);
         return -ENOENT;
     }
 	if (inode->type != DIRECTORY) {
+		pthread_mutex_unlock(&mutex);
 		free(inode);
 		free(base);
 		return -ENOTDIR;
@@ -708,6 +733,7 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 	for (unsigned int i = 0; i < inode_block_size; i++) {
 		int block_num = inode->direct_ptr[i];
 		if (bio_read_multi(block_num, 1, base) != EXIT_SUCCESS) {
+			pthread_mutex_unlock(&mutex);
 			free(inode);
 			free(base);
 			return -EIO;
@@ -723,6 +749,9 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 		}
 	}
 	end:
+	time(&inode->vstat.st_atime);
+	writei(inode->ino, inode);
+	pthread_mutex_unlock(&mutex);
 	free(inode);
 	free(base);
 	debug("rufs_readdir(): EXIT\n");
@@ -759,77 +788,50 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 		free(dir_inode);
 		return -ENOMEM;
 	}
-	/*void *block_ptr = malloc(BLOCK_SIZE);
-	if (!block_ptr) {
-		free(path_dir);
-		free(path_base);
-		free(dir_inode);
-		free(base_inode);
-		return -ENOMEM;
-	}*/
 	char *dir_path = dirname(path_dir);
 	char *base = basename(path_base);
+	pthread_mutex_lock(&mutex);
 	if (get_node_by_path(dir_path, ROOT_INO, dir_inode) != EXIT_SUCCESS) {
+		pthread_mutex_unlock(&mutex);
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
 		free(base_inode);
-		//free(block_ptr);
 		return -ENOENT;
 	}
-	int base_ino/*, base_block*/;
+	int base_ino;
 	if ((base_ino = get_avail_ino()) == -1) {
+		pthread_mutex_unlock(&mutex);
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
 		free(base_inode);
-		//free(block_ptr);
 		return -ENOSPC;
 	}
-	/*if ((base_block = get_avail_blkno()) == -1) {
-		bitmap_t inode_bitmap = get_inode_bitmap(superblock);
-		unset_bitmap(inode_bitmap, base_ino);
-		update_inode_bitmap(inode_bitmap, TRUE, superblock);
-		free(path_dir);
-		free(path_base);
-		free(dir_inode);
-		free(base_inode);
-		free(block_ptr);
-		return -ENOSPC;
-	}*/
 	if (dir_add(*dir_inode, base_ino, base, strlen(base)) == -1) {
 		bitmap_t inode_bitmap = get_inode_bitmap(superblock);
 		unset_bitmap(inode_bitmap, base_ino);
 		update_inode_bitmap(inode_bitmap, TRUE, superblock);
-		/*bitmap_t data_bitmap = get_data_bitmap(superblock);
-		unset_bitmap(data_bitmap, base_block);
-		update_data_bitmap(data_bitmap, TRUE, superblock);*/
+		pthread_mutex_unlock(&mutex);
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
 		free(base_inode);
-		//free(block_ptr);
 		return -ENOSPC;
 	}
 	memset(base_inode, 0, sizeof(struct inode));
-	/*memset(block_ptr, 0, BLOCK_SIZE);
-	bio_write(base_block, block_ptr);
-	base_inode->direct_ptr[0] = base_block;*/
 	base_inode->ino = base_ino;
 	base_inode->link = 2;
-	base_inode->size = 0/*BLOCK_SIZE*/;
+	base_inode->size = 0;
 	base_inode->type = DIRECTORY;
 	base_inode->valid = TRUE;
-	base_inode->vstat.st_mode = S_IFDIR | mode;
 	base_inode->vstat.st_atime = base_inode->vstat.st_mtime = time(NULL);
 	writei(base_ino, base_inode);
-	/*dir_add(*base_inode, base_ino, ".", 1);
-	dir_add(*base_inode, dir_inode->ino, "..", 2);*/
+	pthread_mutex_unlock(&mutex);
 	free(path_dir);
 	free(path_base);
 	free(dir_inode);
 	free(base_inode);
-	//free(block_ptr);
 	debug("rufs_mkdir(): EXIT\n");
 	return 0;
 }
@@ -917,7 +919,9 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	}
 	char *dir_path = dirname(path_dir);
 	char *base = basename(path_base);
+	pthread_mutex_lock(&mutex);
 	if (get_node_by_path(dir_path, ROOT_INO, dir_inode) != EXIT_SUCCESS) {
+		pthread_mutex_unlock(&mutex);
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
@@ -926,6 +930,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	}
 	int base_ino;
 	if ((base_ino = get_avail_ino()) == -1) {
+		pthread_mutex_unlock(&mutex);
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
@@ -936,6 +941,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 		bitmap_t inode_bitmap = get_inode_bitmap(superblock);
 		unset_bitmap(inode_bitmap, base_ino);
 		update_inode_bitmap(inode_bitmap, TRUE, superblock);
+		pthread_mutex_unlock(&mutex);
 		free(path_dir);
 		free(path_base);
 		free(dir_inode);
@@ -948,9 +954,9 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	base_inode->size = 0;
 	base_inode->type = FILE;
 	base_inode->valid = TRUE;
-	base_inode->vstat.st_mode = S_IFREG | mode;
 	base_inode->vstat.st_mtime = base_inode->vstat.st_atime = time(NULL);
 	writei(base_ino, base_inode);
+	pthread_mutex_unlock(&mutex);
 	free(path_dir);
 	free(path_base);
 	free(dir_inode);
@@ -966,10 +972,13 @@ static int rufs_open(const char *path, struct fuse_file_info *fi) {
 	debug("rufs_open(): ENTER\n");
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return -1;
+	pthread_mutex_lock(&mutex);
 	if (get_node_by_path(path, ROOT_INO, inode) != EXIT_SUCCESS || inode->type != FILE) {
+		pthread_mutex_unlock(&mutex);
 		free(inode);
 		return -1;
 	}
+	pthread_mutex_unlock(&mutex);
 	free(inode);
 	debug("rufs_open(): EXIT\n");
     return 0;
@@ -990,15 +999,18 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 		free(inode);
 		return 0;
 	}
+	pthread_mutex_lock(&mutex);
 	if (get_node_by_path(path, ROOT_INO, inode) != EXIT_SUCCESS || inode->type != FILE) {
+		pthread_mutex_unlock(&mutex);
 		free(inode);
 		free(block_buffer);
 		return 0;
 	}
 	memset(block_buffer, 0, BLOCK_SIZE);
 	int starting_block_index = offset / BLOCK_SIZE;
-	int ending_block_index = min(15, (offset + size - 1) / BLOCK_SIZE);
+	int ending_block_index = min(16 + 8 * (BLOCK_SIZE / sizeof(int)), (offset + size - 1) / BLOCK_SIZE);
 	if (ending_block_index - starting_block_index < 0) {
+		pthread_mutex_unlock(&mutex);
 		free(inode);
 		free(block_buffer);
 		return 0;
@@ -1009,13 +1021,29 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 	for (int i = starting_block_index; i <= ending_block_index; i++) {
 		int bytes_to_read = min(bytes_left, BLOCK_SIZE - block_offset);
 		bytes_left = max(0, bytes_left - bytes_to_read);
-		if (inode->direct_ptr[i] != 0) {
-			bio_read_multi(inode->direct_ptr[i], 1, block_buffer);
-			memcpy(buffer + bytes_read, block_buffer + block_offset, bytes_to_read);
-			bytes_read += bytes_to_read;
+		if (i < 16) {
+			if (inode->direct_ptr[i] != 0) {
+				bio_read_multi(inode->direct_ptr[i], 1, block_buffer);
+				memcpy(buffer + bytes_read, block_buffer + block_offset, bytes_to_read);
+				bytes_read += bytes_to_read;
+			}
+		} else {
+			int new_i = i - 16;
+			int val_index = new_i % (BLOCK_SIZE / sizeof(int));
+			int ptr_index = new_i / (BLOCK_SIZE / sizeof(int));
+			if (inode->indirect_ptr[ptr_index] != 0) {
+				bio_read_multi(inode->indirect_ptr[ptr_index], 1, block_buffer);
+				int blkno = ((int *)block_buffer)[val_index];
+				if (blkno != 0) {
+					bio_read_multi(blkno, 1, block_buffer);
+					memcpy(buffer + bytes_read, block_buffer + block_offset, bytes_to_read);
+					bytes_read += bytes_to_read;
+				}
+			}
 		}
 		block_offset = 0;
 	}
+	pthread_mutex_unlock(&mutex);
 	free(inode);
 	free(block_buffer);
 	debug("rufs_read(): EXIT\n");
@@ -1024,6 +1052,11 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 
 // Status: COMPLETE
 static int rufs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
+	// Step 1: You could call get_node_by_path() to get inode from path
+	// Step 2: Based on size and offset, read its data blocks from disk
+	// Step 3: Write the correct amount of data from offset to disk
+	// Step 4: Update the inode info and write it to disk
+	// Note: this function should return the amount of bytes you write to disk
     debug("rufs_write(): ENTER\n");
 	debug("rufs_write(): WRITING \"%lu\" BYTES WITH AN OFFSET OF \"%ld\"\n", size, offset);
     if (size == 0) return 0;
@@ -1032,44 +1065,98 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
     char *block_buffer = malloc(BLOCK_SIZE);
     if (!block_buffer) {
         free(inode);
-        return 0;
+        return -ENOMEM;
     }
+	char *alloc_buffer = malloc(BLOCK_SIZE);
+	if (!alloc_buffer) {
+		free(inode);
+		free(block_buffer);
+		return -ENOMEM;
+	}
+	pthread_mutex_lock(&mutex);
     bitmap_t data_bitmap = get_data_bitmap(superblock);
     if (!data_bitmap) {
+		pthread_mutex_unlock(&mutex);
         free(inode);
         free(block_buffer);
-        return 0;
+		free(alloc_buffer);
+        return -ENOMEM;
     }
     if (get_node_by_path(path, ROOT_INO, inode) != EXIT_SUCCESS || inode->type != FILE) {
+		pthread_mutex_unlock(&mutex);
         free(inode);
         free(block_buffer);
         free(data_bitmap);
-        return 0;
+		free(alloc_buffer);
+        return -ENOENT;
     }
     memset(block_buffer, 0, BLOCK_SIZE);
     int starting_block_index = offset / BLOCK_SIZE;
-    int ending_block_index = min(15, (offset + size - 1) / BLOCK_SIZE);
+    int ending_block_index = min(15 + 8 * (BLOCK_SIZE / sizeof(int)), (offset + size - 1) / BLOCK_SIZE);
     if (ending_block_index - starting_block_index < 0) {
+		pthread_mutex_unlock(&mutex);
         free(inode);
         free(block_buffer);
         free(data_bitmap);
-        return 0;
+		free(alloc_buffer);
+        return -ENOSPC;
     }
     int size_increase = 0;
     for (int i = starting_block_index; i <= ending_block_index; i++) {
-        if (inode->direct_ptr[i] == 0) {
-            int blkno = get_avail_blkno_no_wr(data_bitmap, superblock);
-            if (blkno == -1) {
-                free(inode);
-                free(block_buffer);
-                free(data_bitmap);
-                return 0;
-            }
-            size_increase += BLOCK_SIZE;
-            inode->direct_ptr[i] = blkno;
-            bio_write_multi(blkno, 1, block_buffer);
-        }
+		int blkno;
+		if (i < 16) {
+			if (inode->direct_ptr[i] == 0) {
+				blkno = get_avail_blkno_no_wr(data_bitmap, superblock);
+				if (blkno == -1) {
+					pthread_mutex_unlock(&mutex);
+					free(inode);
+					free(block_buffer);
+					free(data_bitmap);
+					free(alloc_buffer);
+					return -ENOSPC;
+				}
+				size_increase += BLOCK_SIZE;
+				inode->direct_ptr[i] = blkno;
+				bio_write_multi(blkno, 1, block_buffer);
+			}
+		} else {
+			int new_i = i - 16;
+			int val_index = new_i % (BLOCK_SIZE / sizeof(int));
+			int ptr_index = new_i / (BLOCK_SIZE / sizeof(int));
+			if (inode->indirect_ptr[ptr_index] == 0) {
+				blkno = get_avail_blkno_no_wr(data_bitmap, superblock);
+				if (blkno == -1) {
+					pthread_mutex_unlock(&mutex);
+					free(inode);
+					free(block_buffer);
+					free(data_bitmap);
+					free(alloc_buffer);
+					return -ENOSPC;
+				}
+				size_increase += BLOCK_SIZE;
+				inode->indirect_ptr[ptr_index] = blkno;
+				bio_write_multi(blkno, 1, block_buffer);
+			}
+			bio_read_multi(inode->indirect_ptr[ptr_index], 1, alloc_buffer);
+			int *list = (int *)alloc_buffer;
+			if (list[val_index] == 0) {
+				blkno = get_avail_blkno_no_wr(data_bitmap, superblock);
+				if (blkno == -1) {
+					pthread_mutex_unlock(&mutex);
+					free(inode);
+					free(block_buffer);
+					free(data_bitmap);
+					free(alloc_buffer);
+					return -ENOSPC;
+				}
+				size_increase += BLOCK_SIZE;
+				list[val_index] = blkno;
+				bio_write_multi(blkno, 1, block_buffer);
+				bio_write_multi(inode->indirect_ptr[ptr_index], 1, alloc_buffer);
+			}
+		}
     }
+	free(alloc_buffer);
     if (size_increase > 0) {
         inode->size += size_increase;
         writei(inode->ino, inode);
@@ -1081,12 +1168,26 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
     for (int i = starting_block_index; i <= ending_block_index; i++) {
         int bytes_to_read = min(bytes_left, BLOCK_SIZE - block_offset);
         bytes_left = max(0, bytes_left - bytes_to_read);
-        bio_read_multi(inode->direct_ptr[i], 1, block_buffer);
-        memcpy(block_buffer + block_offset, buffer + bytes_read, bytes_to_read);
-        bio_write_multi(inode->direct_ptr[i], 1, block_buffer);
+		if (i < 16) {
+			bio_read_multi(inode->direct_ptr[i], 1, block_buffer);
+			memcpy(block_buffer + block_offset, buffer + bytes_read, bytes_to_read);
+			bio_write_multi(inode->direct_ptr[i], 1, block_buffer);
+		} else {
+			int new_i = i - 16;
+			int val_index = new_i % (BLOCK_SIZE / sizeof(int));
+			int ptr_index = new_i / (BLOCK_SIZE / sizeof(int));
+			bio_read_multi(inode->indirect_ptr[ptr_index], 1, block_buffer);
+			int blkno = ((int *)block_buffer)[val_index];
+			bio_read_multi(blkno, 1, block_buffer);
+			memcpy(block_buffer + block_offset, buffer + bytes_read, bytes_to_read);
+			bio_write_multi(blkno, 1, block_buffer);
+		}
 		bytes_read += bytes_to_read;
-        block_offset = 0;
+		block_offset = 0;
     }
+	time(&inode->vstat.st_mtime);
+	writei(inode->ino, inode);
+	pthread_mutex_unlock(&mutex);
     free(inode);
     free(block_buffer);
     debug("rufs_write(): EXIT\n");

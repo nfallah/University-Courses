@@ -50,7 +50,7 @@ int dev_open(const char* diskfile_path) {
 
 void dev_close() {
   if (diskfile >= 0) {
-  close(diskfile);
+    close(diskfile);
   }
 }
 
