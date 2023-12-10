@@ -134,8 +134,8 @@ int writei(uint16_t ino, struct inode *inode) {
 
 // find the directory entry of file fname within directory, also reports which direct pointer was used and the offset into the block where it was found
 int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, size_t name_len, int *out_direct_pointer_index, int *out_block_dirent_index, struct dirent *out_dirent){
-	debug("dir_find_entry_and_location(): ENTER\n");
-    debug("dir_find_entry_and_location(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
+	//debug("dir_find_entry_and_location(): ENTER\n");
+    //debug("dir_find_entry_and_location(): TARGET DIRENT IS \"%s\" LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
     
     void *base = malloc(BLOCK_SIZE);
     if (!base) {
@@ -160,9 +160,9 @@ int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, si
 				return -1;
 			}
             struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
-			debug("dir_find_entry_and_location(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
+			//debug("dir_find_entry_and_location(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
             if (current_dirent->valid == TRUE && strcmp(current_dirent->name, fname) == 0) {
-				debug("dir_find_entry_and_location(): SUCCESSFULLY FOUND DIRENT \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
+				//debug("dir_find_entry_and_location(): SUCCESSFULLY FOUND DIRENT \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
 				*out_direct_pointer_index = i;
 				*out_block_dirent_index = j;
 				memcpy(out_dirent, current_dirent, sizeof(struct dirent));
@@ -173,8 +173,8 @@ int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, si
         }
     }
     free(base);
-	debug("dir_find_entry_and_location(): TARGET DIRENT \"%s\" NOT LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
-    debug("dir_find_entry_and_location(): EXIT\n");
+	//debug("dir_find_entry_and_location(): TARGET DIRENT \"%s\" NOT LOCATED IN INO \"%d\"\n", fname, inode_of_dir);
+    //debug("dir_find_entry_and_location(): EXIT\n");
     return -1;
 }
 
@@ -209,8 +209,8 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	// Allocate a new data block for this directory if it does not exist
 	// Update directory inode
 	// Write directory entry
-	debug("dir_add(): ENTER\n");
-	debug("dir_add(): PARENT INO IS \"%d\"; CHILD IS \"%s\" WITH INO \"%d\"\n", dir_inode.ino, fname, f_ino);
+	//debug("dir_add(): ENTER\n");
+	//debug("dir_add(): PARENT INO IS \"%d\"; CHILD IS \"%s\" WITH INO \"%d\"\n", dir_inode.ino, fname, f_ino);
 	size_t inode_block_size = (dir_inode.size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	if (inode_block_size > 16 || dir_inode.type != DIRECTORY || dir_inode.valid == FALSE) return -1;
 	void *base = malloc(BLOCK_SIZE);
@@ -236,7 +236,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 				block_num_target = i;
 				dirent_index = j;
 			}
-			debug("dir_add(): EXAMINING DIRENT \"%d\" -- valid = \"%d\", name = \"%s\"\n", j, current_dirent->valid, current_dirent->name);
+			//debug("dir_add(): EXAMINING DIRENT \"%d\" -- valid = \"%d\", name = \"%s\"\n", j, current_dirent->valid, current_dirent->name);
 			size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
 		}
 	}
@@ -299,8 +299,8 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 		return -1;
 	}
 	free(base);
-	debug("dir_add(): TARGET BLOCK IS \"%d\"\n", dir_inode.direct_ptr[block_num_target]);
-	debug("dir_add(): EXIT\n");
+	//debug("dir_add(): TARGET BLOCK IS \"%d\"\n", dir_inode.direct_ptr[block_num_target]);
+	//debug("dir_add(): EXIT\n");
 	return EXIT_SUCCESS;
 }
 
@@ -495,8 +495,8 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
-    debug("get_node_by_path(): ENTER\n");
-    debug("get_node_by_path(): STARTING PATH IS \"%s\"\n", path);
+    //debug("get_node_by_path(): ENTER\n");
+    //debug("get_node_by_path(): STARTING PATH IS \"%s\"\n", path);
     if (!path || path[0] != '/') return -1;
 	struct dirent *current_dirent = malloc(sizeof(struct dirent));
 	if (!current_dirent) return -1;
@@ -512,7 +512,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 		}
 		memcpy(target_directory, path + start_ind, end_ind - start_ind + 1);
 		if (path[end_ind] == '/') target_directory[end_ind - start_ind] = '\0';
-		debug("get_node_by_path(): taking a look at \"%s\"\n", target_directory);
+		//debug("get_node_by_path(): taking a look at \"%s\"\n", target_directory);
         if (dir_find(current_ino, target_directory, end_ind - start_ind + 1, current_dirent) == -1) {
 			free(current_dirent);
 			free(target_directory);
@@ -529,8 +529,8 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
         return -1;
     }
 	free(current_dirent);
-	debug("get_node_by_path(): FINAL INO IS \"%d\"\n", current_ino);
-    debug("get_node_by_path(): EXIT\n");
+	//debug("get_node_by_path(): FINAL INO IS \"%d\"\n", current_ino);
+    //debug("get_node_by_path(): EXIT\n");
     return EXIT_SUCCESS;
 }
 
@@ -553,7 +553,7 @@ int rufs_mkfs() {
 	 * 4) Inodes
 	 * 5) Data
 	 */
-	debug("rufs_mkfs(): ENTER\n");
+	//debug("rufs_mkfs(): ENTER\n");
 	dev_init(diskfile_path);
 	// Superblock initialization
 	size_t superblock_block_size = (sizeof(struct superblock) + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -606,7 +606,7 @@ int rufs_mkfs() {
 	free(inode_bitmap);
 	free(data_bitmap);
 	free(inodes);
-	debug("rufs_mkfs(): EXIT\n");
+	//debug("rufs_mkfs(): EXIT\n");
 	return EXIT_SUCCESS;
 }
 
@@ -619,7 +619,7 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 	// Step 1a: If disk file is not found, call mkfs
 	// Step 1b: If disk file is found, just initialize in-memory data structures
 	// and read superblock from disk
-	debug("rufs_init(): ENTER\n");
+	//debug("rufs_init(): ENTER\n");
 	boolean init = FALSE;
 	pthread_mutex_lock(&mutex);
 	if (access(diskfile_path, F_OK) != 0) {
@@ -648,7 +648,7 @@ static void *rufs_init(struct fuse_conn_info *conn) {
 		free(rootdir_inode);
 	}
 	pthread_mutex_unlock(&mutex);
-	debug("rufs_init(): EXIT\n");
+	//debug("rufs_init(): EXIT\n");
 	return NULL;
 }
 
@@ -657,19 +657,19 @@ static void rufs_destroy(void *userdata) {
 	// Step 1: De-allocate in-memory data structures
 	// Step 2: Close diskfile 
 	if (BENCHMARK) printf("TOTAL INODE BLOCKS ALLOCATED: %llu\nTOTAL DATA BLOCKS ALLOCATED: %llu\n", TOTAL_INODE_BLOCKS, TOTAL_DATA_BLOCKS);
-	debug("rufs_destroy(): ENTER\n");
+	//debug("rufs_destroy(): ENTER\n");
 	pthread_mutex_lock(&mutex);
 	free(superblock);
 	dev_close(diskfile_path);
 	pthread_mutex_unlock(&mutex);
-	debug("rufs_destroy(): EXIT\n");
+	//debug("rufs_destroy(): EXIT\n");
 }
 
 // Status: COMPLETE
 static int rufs_getattr(const char *path, struct stat *stbuf) {
 	// Step 1: call get_node_by_path() to get inode from path
 	// Step 2: fill attribute of file into stbuf from inode
-	debug("rufs_getattr(): ENTER\n");
+	//debug("rufs_getattr(): ENTER\n");
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return -ENOMEM;
 	pthread_mutex_lock(&mutex);
@@ -690,7 +690,7 @@ static int rufs_getattr(const char *path, struct stat *stbuf) {
 	writei(inode->ino, inode);
 	pthread_mutex_unlock(&mutex);
 	free(inode);
-	debug("rufs_getattr(): EXIT\n");
+	//debug("rufs_getattr(): EXIT\n");
 	return 0;
 }
 
@@ -698,7 +698,7 @@ static int rufs_getattr(const char *path, struct stat *stbuf) {
 static int rufs_opendir(const char *path, struct fuse_file_info *fi) {
 	// Step 1: Call get_node_by_path() to get inode from path
 	// Step 2: If not find, return -1
-	debug("rufs_opendir(): ENTER\n");
+	//debug("rufs_opendir(): ENTER\n");
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return -ENOMEM;
 	pthread_mutex_lock(&mutex);
@@ -714,7 +714,7 @@ static int rufs_opendir(const char *path, struct fuse_file_info *fi) {
 	}
 	pthread_mutex_unlock(&mutex);
 	free(inode);
-	debug("rufs_opendir(): EXIT\n");
+	//debug("rufs_opendir(): EXIT\n");
     return 0;
 }
 
@@ -722,7 +722,7 @@ static int rufs_opendir(const char *path, struct fuse_file_info *fi) {
 static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 	// Step 1: Call get_node_by_path() to get inode from path
 	// Step 2: Read directory entries from its data blocks, and copy them to filler
-	debug("rufs_readdir(): ENTER\n");
+	//debug("rufs_readdir(): ENTER\n");
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return -ENOMEM;
 	void *base = malloc(BLOCK_SIZE);
@@ -759,7 +759,7 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 			struct dirent *current_dirent = (struct dirent *)(base + j * sizeof(struct dirent));
 			if (current_dirent->valid == TRUE && strcmp(current_dirent->name, ".") != 0 && strcmp(current_dirent->name, "..") != 0) {
 				filler(buffer, current_dirent->name, NULL, 0);
-				debug("rufs_readdir(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
+				//debug("rufs_readdir(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
 			}
 			size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
 		}
@@ -770,7 +770,7 @@ static int rufs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, 
 	pthread_mutex_unlock(&mutex);
 	free(inode);
 	free(base);
-	debug("rufs_readdir(): EXIT\n");
+	//debug("rufs_readdir(): EXIT\n");
 	return 0;
 }
 
@@ -782,8 +782,8 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	// Step 4: Call dir_add() to add directory entry of target directory to parent directory
 	// Step 5: Update inode for target directory
 	// Step 6: Call writei() to write inode to disk
-	debug("rufs_mkdir(): ENTER\n");
-	debug("rufs_mkdir(): TARGET PATH IS \"%s\"\n", path);
+	//debug("rufs_mkdir(): ENTER\n");
+	//debug("rufs_mkdir(): TARGET PATH IS \"%s\"\n", path);
 	char *path_dir = strdup(path);
 	if (!path_dir) return -ENOMEM;
 	char *path_base = strdup(path);
@@ -850,7 +850,7 @@ static int rufs_mkdir(const char *path, mode_t mode) {
 	free(path_base);
 	free(dir_inode);
 	free(base_inode);
-	debug("rufs_mkdir(): EXIT\n");
+	//debug("rufs_mkdir(): EXIT\n");
 	return 0;
 }
 
@@ -927,8 +927,8 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
 	// Step 5: Update inode for target file
 	// Step 6: Call writei() to write inode to disk
-	debug("rufs_create(): ENTER\n");
-	debug("rufs_create(): TARGET PATH IS \"%s\"\n", path);
+	//debug("rufs_create(): ENTER\n");
+	//debug("rufs_create(): TARGET PATH IS \"%s\"\n", path);
 	char *path_dir = strdup(path);
 	if (!path_dir) return -ENOMEM;
 	char *path_base = strdup(path);
@@ -993,7 +993,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	free(path_base);
 	free(dir_inode);
 	free(base_inode);
-	debug("rufs_create(): EXIT\n");
+	//debug("rufs_create(): EXIT\n");
 	return 0;
 }
 
@@ -1001,7 +1001,7 @@ static int rufs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 static int rufs_open(const char *path, struct fuse_file_info *fi) {
 	// Step 1: Call get_node_by_path() to get inode from path
 	// Step 2: If not find, return -1
-	debug("rufs_open(): ENTER\n");
+	//debug("rufs_open(): ENTER\n");
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return -1;
 	pthread_mutex_lock(&mutex);
@@ -1012,7 +1012,7 @@ static int rufs_open(const char *path, struct fuse_file_info *fi) {
 	}
 	pthread_mutex_unlock(&mutex);
 	free(inode);
-	debug("rufs_open(): EXIT\n");
+	//debug("rufs_open(): EXIT\n");
     return 0;
 }
 
@@ -1022,7 +1022,7 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 	// Step 2: Based on size and offset, read its data blocks from disk
 	// Step 3: copy the correct amount of data from offset to buffer
 	// Note: this function should return the amount of bytes you copied to buffer
-	debug("rufs_read(): ENTER\n");
+	//debug("rufs_read(): ENTER\n");
 	if (size == 0) return 0;
 	struct inode *inode = malloc(sizeof(struct inode));
 	if (!inode) return 0;
@@ -1078,7 +1078,7 @@ static int rufs_read(const char *path, char *buffer, size_t size, off_t offset, 
 	pthread_mutex_unlock(&mutex);
 	free(inode);
 	free(block_buffer);
-	debug("rufs_read(): EXIT\n");
+	//debug("rufs_read(): EXIT\n");
 	return bytes_read;
 }
 
@@ -1089,8 +1089,8 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 	// Step 3: Write the correct amount of data from offset to disk
 	// Step 4: Update the inode info and write it to disk
 	// Note: this function should return the amount of bytes you write to disk
-    debug("rufs_write(): ENTER\n");
-	debug("rufs_write(): WRITING \"%lu\" BYTES WITH AN OFFSET OF \"%ld\"\n", size, offset);
+    //debug("rufs_write(): ENTER\n");
+	//debug("rufs_write(): WRITING \"%lu\" BYTES WITH AN OFFSET OF \"%ld\"\n", size, offset);
     if (size == 0) return 0;
     struct inode *inode = malloc(sizeof(struct inode));
     if (!inode) return 0;
@@ -1226,7 +1226,7 @@ static int rufs_write(const char *path, const char *buffer, size_t size, off_t o
 	pthread_mutex_unlock(&mutex);
     free(inode);
     free(block_buffer);
-    debug("rufs_write(): EXIT\n");
+    //debug("rufs_write(): EXIT\n");
     return bytes_read;
 }
 
