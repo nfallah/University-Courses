@@ -163,10 +163,10 @@ int dir_find_entry_and_location(struct inode inode_of_dir, const char *fname, si
 			debug("dir_find_entry_and_location(): CURRENT DIRENT IS \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
             if (current_dirent->valid == TRUE && strcmp(current_dirent->name, fname) == 0) {
 				debug("dir_find_entry_and_location(): SUCCESSFULLY FOUND DIRENT \"%s\" WITH INO \"%d\"\n", current_dirent->name, current_dirent->ino);
-                free(base);
 				*out_direct_pointer_index = i;
 				*out_block_dirent_index = j;
 				memcpy(out_dirent, current_dirent, sizeof(struct dirent));
+				free(base);
                 return EXIT_SUCCESS;
             }
             size = size >= sizeof(struct dirent) ? size - sizeof(struct dirent) : 0;
@@ -860,14 +860,22 @@ void split_path_into_base_path_and_name(const char *path, char **base_path_out, 
 
 //removes file or directory, specified by file_to_remove_type
 static int remove_given_path(const char *path, int file_to_remove_type){
-	char *base_path;
-	char *remove_target_name;
-	split_path_into_base_path_and_name(path, &base_path, &remove_target_name);
-
+	char *dir_copy = strdup(path);
+	if (!dir_copy) return -1; // not sure if correct success flag, correct as needed
+	char *base_copy = strdup(path);
+	if (!base_copy) {
+		free(dir_copy);
+		return -1; // same
+	}
+	char *dir_name = dirname(dir_copy);
+	char *base_name = basename(base_copy);
+	//split_path_into_base_path_and_name(path, &base_path, &remove_target_name);
 	struct inode base_dir_inode;
-	get_node_by_path(base_path, ROOT_INO, &base_dir_inode);
-
-	return remove_from_dir(base_dir_inode, remove_target_name, strlen(remove_target_name), file_to_remove_type);
+	get_node_by_path(dir_name, ROOT_INO, &base_dir_inode);
+	int status = remove_from_dir(base_dir_inode, base_name, strlen(base_name), file_to_remove_type);
+	free(dir_copy);
+	free(base_copy);
+	return status;
 }
 
 static int rufs_rmdir(const char *path) {
@@ -1202,6 +1210,7 @@ static int rufs_unlink(const char *path) {
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 	// Step 6: Call dir_remove() to remove directory entry of target file in its parent directory
 
+	// gotta put multithreading locks for this and other rufs functions at the end
 	return remove_given_path(path, FILE);
 }
 
