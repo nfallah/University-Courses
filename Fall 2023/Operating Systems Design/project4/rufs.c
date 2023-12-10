@@ -904,7 +904,13 @@ static int rufs_rmdir(const char *path) {
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 	// Step 6: Call dir_remove() to remove directory entry of target directory in its parent directory
 
-	return remove_given_path(path, DIRECTORY);
+	pthread_mutex_lock(&mutex);
+
+	int ret = remove_given_path(path, DIRECTORY);
+
+	pthread_mutex_unlock(&mutex);
+
+	return ret;
 }
 
 static int rufs_releasedir(const char *path, struct fuse_file_info *fi) {
@@ -1233,7 +1239,13 @@ static int rufs_unlink(const char *path) {
 	// Step 6: Call dir_remove() to remove directory entry of target file in its parent directory
 
 	// gotta put multithreading locks for this and other rufs functions at the end
-	return remove_given_path(path, FILE);
+	pthread_mutex_lock(&mutex);
+
+	int ret = remove_given_path(path, FILE);
+
+	pthread_mutex_unlock(&mutex);
+
+	return ret;
 }
 
 static int rufs_truncate(const char *path, off_t size) {
