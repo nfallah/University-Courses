@@ -1,0 +1,4 @@
+[submodule "Spring 2024/computer-networks"]
+	path = Spring 2024/computer-networks
+	url = https://github.com/nfallah/computer-networks
+	branch = main
